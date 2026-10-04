@@ -1,0 +1,37 @@
+name: Update prices
+
+# Checks Anthropic's pricing page daily and opens a pull request when the bundled
+# price table changes. Merging that PR triggers an automatic patch release.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python scripts/update_prices.py
+      # PRs opened with GITHUB_TOKEN don't trigger other workflows, so test here.
+      - run: pip install -e . pytest && pytest -q
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: update-prices
+          commit-message: Update model prices from Anthropic pricing page
+          title: Update model prices
+          body: |
+            Automated update of `src/tallyline/prices.json` from
+            https://platform.claude.com/docs/en/about-claude/pricing
+
+            Review the diff against the pricing page. Merging releases a new patch version.
+          add-paths: src/tallyline/prices.json

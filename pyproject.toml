@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tallyline"
+dynamic = ["version"]
+description = "Claude Code status line that tallies your token usage and API-equivalent cost by day, month and year"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "nhinata" }]
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["claude-code", "statusline", "tokens", "usage", "cost"]
+classifiers = [
+  "Environment :: Console",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Repository = "https://github.com/nhinata/tallyline"
+
+[project.scripts]
+tallyline = "tallyline.cli:main"
+
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/tallyline/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tallyline"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
