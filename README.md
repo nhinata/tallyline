@@ -51,6 +51,42 @@ Every turn re-reads the whole context, so cumulative tokens grow much faster tha
 
 Token totals include input, output, cache writes and cache reads. Cache reads are cheap, so the `≈$` cost is the better gauge of how heavily you are using Claude. The cost is an API-equivalent estimate at list prices.
 
+## Finding out why usage is high
+
+The status line shows how much you use. `tallyline diagnose` shows why, and what to change:
+
+```
+$ tallyline diagnose
+Last 30 days · 9 sessions · 2,087 requests · ≈$331.83 API-equivalent
+  cache reads 52%   cache writes 43%   output 6%
+
+Top causes
+ 1. Resumed after the cache expired                    ≈$122.81   37%
+    72 requests after an idle gap wrote the context again (avg 384.0k tokens).
+    → Before a long break, /compact or start a new session.
+ 2. Tool outputs kept in context                       ≈$102.28   31%
+    claude-in-chrome 74% · Read 17% · Bash 6% · Edit 1%
+    Costliest: Read notes.md (25.1k tokens, carried 482 turns, ≈$2.52)
+    → Delegate broad reading or browsing to a subagent so only its summary stays.
+ ...
+```
+
+| Cause | What it counts |
+|---|---|
+| Resumed after the cache expired | Cache writes on a request sent after the cache lifetime (5 minutes or 1 hour) had passed, so the whole context was written again |
+| Tool outputs kept in context | Each tool output's share of cache writes and reads, from the request that first sent it until the session ends or is compacted. Its size comes from how much the context grew |
+| Long context | The part of each cache read above 200k tokens. This overlaps the causes above |
+| Same file read repeatedly | Re-reads of a file within one session, as part of tool outputs |
+
+```bash
+tallyline diagnose --days 7          # look back 7 days (default 30)
+tallyline diagnose --session 1fc6    # one session, by id prefix
+tallyline diagnose --json            # for scripts, or to hand to Claude
+tallyline diagnose --no-titles       # hide session titles, projects and file names
+```
+
+It reads the transcripts directly and only when you run it, so the status line stays as fast as before. Claude Code deletes old transcripts (see Caveats), so the look-back is limited to what is still on disk.
+
 ## Configuration
 
 ```bash

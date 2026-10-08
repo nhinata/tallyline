@@ -30,16 +30,24 @@ def normalize_model(model):
     return _DATE_SUFFIX.sub("", model or "")
 
 
+def rates(prices, model, speed):
+    """USD per token for each field of one model, or None if the model is unknown."""
+    p = prices.get(normalize_model(model))
+    if p is None or any(f not in p for f in FIELDS):
+        return None
+    mult = p.get("fast_multiplier", 1.0) if speed == "fast" else 1.0
+    return {f: p[f] * mult / 1e6 for f in FIELDS}
+
+
 def cost(prices, model, speed, tokens):
     """USD cost for summed token counts of one model, or None if the model is unknown.
 
     tokens: dict with input, output, cache_write_5m, cache_write_1h, cache_read.
     """
-    p = prices.get(normalize_model(model))
-    if p is None or any(f not in p for f in FIELDS):
+    r = rates(prices, model, speed)
+    if r is None:
         return None
-    mult = p.get("fast_multiplier", 1.0) if speed == "fast" else 1.0
-    return sum(tokens.get(f, 0) * p[f] for f in FIELDS) * mult / 1e6
+    return sum(tokens.get(f, 0) * r[f] for f in FIELDS)
 
 
 # --- parsing the official pricing page (used by scripts/update_prices.py and tests) ---

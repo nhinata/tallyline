@@ -115,6 +115,19 @@ def cmd_rebuild(_args):
     print(f"Re-scanned all transcripts into {paths.db_path()} (existing history kept)")
 
 
+def cmd_diagnose(args):
+    from . import diagnose, pricing
+
+    if args.days <= 0:
+        sys.exit("--days must be a positive number")
+    prices = pricing.load(config.load().get("prices"))
+    try:
+        print(diagnose.run(days=args.days, session=args.session, as_json=args.json,
+                           show_titles=not args.no_titles, prices=prices))
+    except LookupError as e:
+        sys.exit(str(e))
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if not argv:  # the status line hot path: skip argparse and its imports
@@ -141,7 +154,13 @@ def main(argv=None):
     p.add_argument("key", nargs="?")
     p.add_argument("value", nargs="?")
     sub.add_parser("rebuild", help="re-scan all transcripts (keeps history of deleted ones)")
+    p = sub.add_parser("diagnose", help="show what drove token usage and how to cut it")
+    p.add_argument("--days", type=int, default=30, help="look back this many days (default 30)")
+    p.add_argument("--session", metavar="ID", help="break down one session (an id prefix works)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("--no-titles", action="store_true",
+                   help="hide session titles, projects and file paths")
     args = parser.parse_args(argv)
     handlers = {"init": cmd_init, "uninstall": cmd_uninstall, "config": cmd_config,
-                "rebuild": cmd_rebuild}
+                "rebuild": cmd_rebuild, "diagnose": cmd_diagnose}
     handlers.get(args.cmd, cmd_render)(args)
