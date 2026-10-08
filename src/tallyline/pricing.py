@@ -84,6 +84,10 @@ def parse_pricing_page(markdown):
     for row in _table_after(lines, "## Model pricing"):
         if len(row) < 6:
             continue
+        # Some models are priced by prompt length ("for prompts over 100,000 tokens");
+        # the table holds one price per model, so keep the standard tier.
+        if re.search(r"for prompts over", row[0], re.IGNORECASE):
+            continue
         values = [_PRICE.search(c) for c in row[1:6]]
         if not all(values):
             continue
