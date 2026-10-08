@@ -80,18 +80,31 @@ def usage_text(tokens, usd, unknown, show_cost, style, color):
     return text
 
 
-def context_pct(info):
+def fmt_context(n):
+    """Context size in whole thousands: 384k, not 384.2k."""
+    if n >= 1e6:
+        return f"{n / 1e6:.1f}M"
+    return f"{n / 1e3:.0f}k" if n >= 1e3 else str(int(n))
+
+
+def context_text(info):
+    """'ctx 384k (38%)': tokens first, since cost scales with them, not with the percentage.
+
+    The same percentage means very different sizes on 200k and 1M context windows.
+    """
     cw = info.get("context_window") or {}
+    cur = cw.get("current_usage")
+    used = sum(cur.get(k) or 0 for k in
+               ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+               ) if cur else None
     pct = cw.get("used_percentage")
-    if pct is None:
-        size = cw.get("context_window_size")
-        cur = cw.get("current_usage")
-        if not size or not cur:
-            return None
-        used = sum(cur.get(k) or 0 for k in
-                   ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
-        pct = used / size * 100
-    return f"ctx {pct:.0f}%"
+    if pct is None and used and cw.get("context_window_size"):
+        pct = used / cw["context_window_size"] * 100
+    if used and pct is not None:
+        return f"ctx {fmt_context(used)} ({pct:.0f}%)"
+    if pct is not None:
+        return f"ctx {pct:.0f}%"
+    return f"ctx {fmt_context(used)}" if used else None
 
 
 WINDOWS = (("five_hour", "5h"), ("seven_day", "7d"))
@@ -146,7 +159,7 @@ def render(info, db, cfg, color=None):
     # this session: context fill, plus session usage when billed by the API. Claude Code
     # sends rate limits only to Pro/Max subscribers, who get those instead.
     limits = rate_limits(info, db)
-    session = [s for s in (context_pct(info),) if s]
+    session = [s for s in (context_text(info),) if s]
     if not limits and info.get("session_id"):
         rows = store.totals_for_session(db, info["session_id"])
         session.append(usage_text(*summarize(rows, prices), show_cost, style, CYAN))

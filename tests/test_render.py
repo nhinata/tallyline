@@ -84,12 +84,30 @@ def test_no_color_env(home, monkeypatch):
     assert "\033" not in render.render({}, setup_db([]), config.load())
 
 
+def test_context_shows_tokens_and_percentage():
+    info = {"context_window": {"context_window_size": 1_000_000, "used_percentage": 38.4,
+                               "current_usage": {"input_tokens": 2, "cache_read_input_tokens": 380_000,
+                                                 "cache_creation_input_tokens": 4_198}}}
+    assert render.context_text(info) == "ctx 384k (38%)"
+
+
 def test_context_percentage_computed_when_missing():
     info = {"context_window": {"context_window_size": 1000,
                                "current_usage": {"input_tokens": 250}}}
-    assert render.context_pct(info) == "ctx 25%"
-    assert render.context_pct({"context_window": {"context_window_size": 1000,
-                                                  "current_usage": None}}) is None
+    assert render.context_text(info) == "ctx 250 (25%)"
+    assert render.context_text({"context_window": {"context_window_size": 1000,
+                                                   "current_usage": None}}) is None
+
+
+def test_context_before_first_response_shows_percentage_only():
+    info = {"context_window": {"context_window_size": 200000, "used_percentage": 0,
+                               "current_usage": None}}
+    assert render.context_text(info) == "ctx 0%"
+
+
+def test_context_size_formatting():
+    assert [render.fmt_context(n) for n in (999, 12_345, 969_400, 1_000_000)] == \
+        ["999", "12k", "969k", "1.0M"]
 
 
 def test_range_start_and_labels():
