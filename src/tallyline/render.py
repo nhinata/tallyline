@@ -8,8 +8,9 @@ PERIODS = ("today", "month", "year")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
-# ANSI styles by scope, widening left to right: this session in cyan, this machine's
-# totals in yellow, account-wide rate limits in magenta. Cost figures are dimmed.
+# Gauges to watch while working come first, history last. ANSI styles by scope: this
+# session in cyan, account-wide rate limits in magenta, this machine's totals in yellow.
+# Cost figures are dimmed.
 CYAN, YELLOW, MAGENTA = "\033[36m", "\033[33m", "\033[35m"
 DIM, RESET = "\033[2m", "\033[0m"
 GAP = "  "  # separates items within a scope; " │ " separates scopes
@@ -166,6 +167,10 @@ def render(info, db, cfg, color=None):
     if session:
         parts.append(style(GAP.join(session), CYAN))
 
+    # whole account, across devices and apps
+    if limits:
+        parts.append(style(limits, MAGENTA))
+
     # this machine: all sessions in the configured period(s)
     names = PERIODS if cfg["range"] == "all" else (
         cfg["range"] if cfg["range"] in PERIODS else "month",)
@@ -179,10 +184,6 @@ def render(info, db, cfg, color=None):
         for n in names
     )
     parts.append(style(totals, YELLOW))
-
-    # whole account, across devices and apps
-    if limits:
-        parts.append(style(limits, MAGENTA))
 
     newer = update.notice(cfg)
     if newer:

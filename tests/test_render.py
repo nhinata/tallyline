@@ -43,18 +43,18 @@ def test_api_user_sees_session_usage(home):
         f"[Opus 5.5] │ ctx 9%  2.0M tok (≈$12.00) │ {MONTH_SEEN_TODAY} 3.0M tok (≈$14.00)")
 
 
-def test_subscriber_sees_account_rate_limits_last_instead_of_session_usage(home):
+def test_subscriber_sees_rate_limits_before_totals_instead_of_session_usage(home):
     db = setup_db([usage_line("a", "r", ts=iso(datetime.now()), inp=1_000_000)])
     info = {**API_INFO, "rate_limits": {"five_hour": {"used_percentage": 23.5, "resets_at": SOON},
                                         "seven_day": {"used_percentage": 41.2, "resets_at": LATER}}}
     assert plain(info, db) == (
-        f"[Opus 5.5] │ ctx 9% │ {MONTH_SEEN_TODAY} 1.0M tok (≈$2.00) │ 5h 24%  7d 41%")
+        f"[Opus 5.5] │ ctx 9% │ 5h 24%  7d 41% │ {MONTH_SEEN_TODAY} 1.0M tok (≈$2.00)")
 
 
 def test_partial_rate_limits(home):
     db = setup_db([])
     info = {"rate_limits": {"seven_day": {"used_percentage": 5, "resets_at": LATER}}}
-    assert plain(info, db, cost=False) == f"{MONTH} 0 tok │ 7d 5%"
+    assert plain(info, db, cost=False) == f"7d 5% │ {MONTH} 0 tok"
 
 
 def test_all_ranges_and_unknown_model(home):

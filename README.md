@@ -5,11 +5,11 @@ A Claude Code status line that **tallies your token usage and API-equivalent cos
 ![tallyline status line on a Max plan](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
 
 ```
-Pro/Max plan:  [Opus 5.5] │ ctx 120k (12%) │ Oct 22.1M tok (≈$14.92) │ 5h 23%  7d 41%
+Pro/Max plan:  [Opus 5.5] │ ctx 120k (12%) │ 5h 23%  7d 41% │ Oct 22.1M tok (≈$14.92)
 API billing:   [Opus 5.5] │ ctx 120k (12%)  6.6M tok (≈$3.85) │ Oct 22.1M tok (≈$14.92)
 ```
 
-Segments widen in scope from left to right: this session (cyan), all sessions on this machine (yellow), your whole account (magenta).
+What to watch while working comes first and totals come last: this session (cyan), your whole account (magenta), all sessions on this machine (yellow).
 
 [日本語版 README](README.ja.md)
 
@@ -38,8 +38,8 @@ Restart Claude Code. `init` backs up `settings.json` to `settings.json.bak`. It 
 | `[Opus 5.5]` | — | Current model |
 | `ctx 120k (12%)` | this session | Size of the context right now, and how full the context window is. It drops after `/clear` or `/compact`. Every turn re-reads the whole context, and resuming after the cache expires (5 minutes or 1 hour idle) writes all of it again, so the token count is the better gauge of cost |
 | `6.6M tok (≈$3.85)` | this session | API billing only: tokens used so far in this session, subagents included |
-| `Oct 22.1M tok (≈$14.92)` | all sessions on this machine | Total for the period (`today`, the month, or the year) |
 | `5h 23%  7d 41%` | your account | Pro/Max only: usage of your 5-hour and 7-day rate limits, counted across all devices and apps. A window that has reset shows `0%` |
+| `Oct 22.1M tok (≈$14.92)` | all sessions on this machine | Total for the period (`today`, the month, or the year) |
 
 A `*` after the period, as in `2026*`, means tallyline's records start partway through that period, so the total is incomplete. This is normal right after installing: Claude Code keeps only recent transcripts (see Caveats).
 
