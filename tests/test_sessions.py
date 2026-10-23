@@ -74,6 +74,17 @@ def test_dead_and_unreadable_session_files_are_skipped(home):
     assert [s["id"] for s in collect()] == ["a1"]
 
 
+def test_windows_never_signals_session_processes(home, monkeypatch):
+    # os.kill(pid, 0) terminates the process on Windows, so it must never be called there
+    def kill(*args):
+        raise AssertionError("os.kill called on Windows")
+
+    session_file(dead_pid(), "a1")
+    monkeypatch.setattr(sessions, "WINDOWS", True)
+    monkeypatch.setattr(sessions.os, "kill", kill)
+    assert [s["id"] for s in collect()] == ["a1"]
+
+
 def test_location_this_session_and_background_continuation(home):
     session_file(ME, "fg", tmux="work:@4.%4", parkedJobId="job9")
     session_file(PARENT, "bg", kind="bg", jobId="job9")
