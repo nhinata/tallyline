@@ -55,9 +55,13 @@ def cost(prices, model, speed, tokens):
 _PRICE = re.compile(r"\$([\d.]+)\s*/\s*MTok")
 
 
+_MODEL_ID = re.compile(r"^claude-[a-z]+(-\d+)+$")
+
+
 def _model_id(name):
-    """'Claude Opus 5.5 ([retired...](...))' -> 'claude-opus-5-5'"""
-    name = re.sub(r"\(.*?\)\)?", "", name)  # drop parenthetical notes and links
+    """'Claude Opus 4.1 ([retired, ... (Google managed)](...))' -> 'claude-opus-4-1'"""
+    # Model names never contain parentheses; notes after them may nest their own.
+    name = name.split("(", 1)[0]
     name = re.sub(r"<sup>.*?</sup>", "", name).strip()
     return re.sub(r"[\s.]+", "-", name.lower())
 
@@ -117,4 +121,7 @@ def parse_pricing_page(markdown):
 
     if not models:
         raise ValueError("no model prices parsed")
+    bad = sorted(m for m in models if not _MODEL_ID.match(m))
+    if bad:
+        raise ValueError(f"unexpected model names: {', '.join(bad)}")
     return models

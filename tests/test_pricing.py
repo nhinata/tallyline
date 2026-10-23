@@ -53,6 +53,32 @@ def test_prompt_length_tiers_use_the_standard_tier(rows):
     }
 
 
+NESTED_NOTES = """
+## Model pricing
+
+| Model | Base input tokens | 5m cache writes | 1h cache writes | Cache hits and refreshes | Output tokens |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Claude Opus 4.1 ([retired, except on Bedrock and Claude Models on Google Cloud (Google managed)](https://x/y)) | $15 / MTok | $18.75 / MTok | $30 / MTok | $1.50 / MTok | $75 / MTok |
+| Claude Mythos 5.1 ([limited availability](https://x/z)) | $10 / MTok | $12.50 / MTok | $20 / MTok | $1 / MTok | $50 / MTok |
+"""
+
+
+def test_notes_with_nested_parentheses_are_dropped_from_the_name():
+    models = pricing.parse_pricing_page(NESTED_NOTES)
+    assert set(models) == {"claude-opus-4-1", "claude-mythos-5-1"}
+
+
+def test_unexpected_model_names_fail_instead_of_shipping():
+    page = NESTED_NOTES.replace("Claude Mythos 5.1", "Claude Mythos 5.1 ]")
+    with pytest.raises(ValueError, match="unexpected model names"):
+        pricing.parse_pricing_page(page)
+
+
+def test_bundled_model_names_look_like_model_ids():
+    for model in pricing.load_bundled():
+        assert pricing._MODEL_ID.match(model), model
+
+
 def test_parse_fails_loudly_on_unexpected_layout():
     with pytest.raises(ValueError):
         pricing.parse_pricing_page("# Pricing\n\nnothing here")
