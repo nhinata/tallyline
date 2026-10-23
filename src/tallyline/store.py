@@ -57,15 +57,68 @@ SCHEMA_VERSION = max(MIGRATIONS)
 COLUMNS = ("key", "ts", "session", "model", "speed") + TOKEN_COLUMNS
 
 
+# Every session's status line renders in its own process, often at the same moment.
+INGEST_WAIT_MS = 50  # how long to wait for another process that is already ingesting
+
+
 def connect(path=None):
     path = path or paths.db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(str(path), timeout=1)
-    version = db.execute("PRAGMA user_version").fetchone()[0]
-    for v in range(version + 1, SCHEMA_VERSION + 1):
-        with db:
-            db.executescript(f"BEGIN; {MIGRATIONS[v]} PRAGMA user_version = {v}; COMMIT;")
+    # WAL lets renders read while another process writes newly ingested rows.
+    db.execute("PRAGMA journal_mode=WAL")
+    if db.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+        with _write_lock(db):  # another process may be migrating the same file
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            for v in range(version + 1, SCHEMA_VERSION + 1):
+                for stmt in _statements(MIGRATIONS[v]):
+                    db.execute(stmt)
+                db.execute(f"PRAGMA user_version = {v}")
     return db
+
+
+def _statements(script):
+    buf = ""
+    for part in script.split(";"):
+        buf += part + ";"
+        if sqlite3.complete_statement(buf):
+            if buf.strip(" \n;"):
+                yield buf
+            buf = ""
+
+
+class _write_lock:
+    """BEGIN IMMEDIATE ... COMMIT, so only one process writes at a time.
+
+    Raises sqlite3.OperationalError ("database is locked") when another process keeps the
+    lock longer than the connection's busy timeout (or wait_ms, when given).
+    """
+
+    def __init__(self, db, wait_ms=None):
+        self.db, self.wait_ms = db, wait_ms
+
+    def __enter__(self):
+        self.level = self.db.isolation_level
+        self.db.isolation_level = None  # manage the transaction explicitly
+        if self.wait_ms is not None:
+            self.db.execute(f"PRAGMA busy_timeout = {int(self.wait_ms)}")
+        try:
+            self.db.execute("BEGIN IMMEDIATE")
+        except BaseException:
+            self._restore()
+            raise
+        return self.db
+
+    def __exit__(self, exc_type, *_):
+        try:
+            self.db.execute("ROLLBACK" if exc_type else "COMMIT")
+        finally:
+            self._restore()
+
+    def _restore(self):
+        if self.wait_ms is not None:
+            self.db.execute("PRAGMA busy_timeout = 1000")
+        self.db.isolation_level = self.level
 
 
 def parse_line(line):
@@ -107,11 +160,42 @@ def rescan(db):
         db.execute("DELETE FROM files")
 
 
-def ingest(db, root=None):
+def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
+    """Parse bytes appended to transcripts since the last run.
+
+    Returns False without waiting when another process is already ingesting; the caller
+    then renders from what is stored, which that process is about to bring up to date.
+    """
     root = root or paths.projects_dir()
+    files = list(root.glob("**/*.jsonl"))
+    if not _changed(db, files):
+        return True
+    try:
+        with _write_lock(db, wait_ms=wait_ms):
+            _ingest(db, files)
+    except sqlite3.OperationalError as e:
+        if "locked" not in str(e) and "busy" not in str(e):
+            raise
+        return False
+    return True
+
+
+def _changed(db, files):
+    offsets = dict(db.execute("SELECT path, offset FROM files"))
+    for path in files:
+        try:
+            if path.stat().st_size != offsets.get(str(path), 0):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _ingest(db, files):
+    # read offsets again inside the lock: another process may have just ingested
     offsets = dict(db.execute("SELECT path, offset FROM files"))
     rows, new_offsets = [], []
-    for path in root.glob("**/*.jsonl"):
+    for path in files:
         key = str(path)
         try:
             size = path.stat().st_size
@@ -134,10 +218,9 @@ def ingest(db, root=None):
                 rows.append(row)
         new_offsets.append((key, start + end))
     if new_offsets:
-        with db:
-            db.executemany(UPSERT, rows)
-            db.executemany("INSERT OR REPLACE INTO files VALUES (?,?)", new_offsets)
-            refresh_daily(db, {r[1] for r in rows})
+        db.executemany(UPSERT, rows)
+        db.executemany("INSERT OR REPLACE INTO files VALUES (?,?)", new_offsets)
+        refresh_daily(db, {r[1] for r in rows})
 
 
 def refresh_daily(db, timestamps):
@@ -180,11 +263,16 @@ _UPDATE_LIMIT = """
 
 def update_limits(db, received, now):
     """received: {window: (pct, resets_at)} as sent by Claude Code for this session."""
-    with db:
-        db.executemany(_UPDATE_LIMIT, [(w, p, r) for w, (p, r) in received.items()])
-        # refresh the observation time at most once a minute to avoid a write per render
-        db.executemany("UPDATE limits SET observed_at = ? WHERE window = ? AND observed_at < ?",
-                       [(int(now), w, int(now) - 60) for w in received])
+    try:
+        with db:
+            db.executemany(_UPDATE_LIMIT, [(w, p, r) for w, (p, r) in received.items()])
+            # refresh the observation time at most once a minute to avoid a write per render
+            db.executemany("UPDATE limits SET observed_at = ? WHERE window = ? AND observed_at < ?",
+                           [(int(now), w, int(now) - 60) for w in received])
+    except sqlite3.OperationalError as e:
+        if "locked" not in str(e) and "busy" not in str(e):
+            raise
+        # another process is writing; the next render records the limits
 
 
 def limits_last_observed(db):

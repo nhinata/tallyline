@@ -1,6 +1,7 @@
 import json
-import sqlite3
 import sys
+import time
+from pathlib import Path
 
 from . import __version__, config, paths, render, store
 
@@ -35,13 +36,31 @@ def cmd_render(_args):
         info = json.load(sys.stdin)
     except ValueError:
         info = {}
-    cfg = config.load()
     try:
+        cfg = config.load()
         db = store.connect()
         store.ingest(db)
         print(render.render(info, db, cfg))
-    except sqlite3.Error as e:  # never break the status line over the cache
-        print(f"tallyline: {e}")
+    except Exception:  # never leave the status line blank; keep the details for a bug report
+        print(f"tallyline: error (see {_log_error()})")
+
+
+def _log_error():
+    """Append the current traceback to error.log next to the cache and return its path."""
+    import traceback
+
+    path = paths.db_path().with_name("error.log")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 1 << 20:
+            path.write_text("", encoding="utf-8")  # keep it small
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} tallyline {__version__}\n")
+            f.write(traceback.format_exc())
+    except OSError:
+        pass
+    home = str(Path.home())
+    return str(path).replace(home, "~", 1) if str(path).startswith(home) else str(path)
 
 
 def _read_settings(path):
@@ -111,7 +130,7 @@ def cmd_config(args):
 def cmd_rebuild(_args):
     db = store.connect()
     store.rescan(db)
-    store.ingest(db)
+    store.ingest(db, wait_ms=30_000)
     print(f"Re-scanned all transcripts into {paths.db_path()} (existing history kept)")
 
 

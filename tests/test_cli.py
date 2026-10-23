@@ -81,3 +81,19 @@ def test_reinit_and_uninstall_recognize_any_tallyline_command(home):
     cli.main(["init"])  # replacing our own older entry needs no --force
     cli.main(["uninstall"])
     assert settings() == {}
+
+
+def test_render_error_shows_a_short_line_and_logs_the_traceback(home, monkeypatch, capsys):
+    import io
+    from tallyline import render
+
+    def broken(*args, **kwargs):
+        raise KeyError("unexpected field")
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+    monkeypatch.setattr(render, "render", broken)
+    cli.main([])
+    out = capsys.readouterr().out.strip()
+    assert out.startswith("tallyline: error (see ") and out.endswith("error.log)")
+    log = paths.db_path().with_name("error.log").read_text()
+    assert "KeyError: 'unexpected field'" in log and "tallyline" in log

@@ -173,6 +173,7 @@ Fast mode requests are multiplied by each model's `fast_multiplier`.
 - Claude Code deletes old transcripts after `cleanupPeriodDays` (30 by default). tallyline keeps whatever it has already ingested, but it can't count transcripts that were deleted before you installed it.
 - Transcript files are an internal Claude Code format and may change.
 - If you switch between several Claude accounts on one machine, their rate limit records can mix.
+- Tested on macOS and Linux. Windows is untested; on Windows, `tallyline sessions` cannot tell whether a listed session is still running, so a crashed session may stay in the list.
 - Not affiliated with or endorsed by Anthropic.
 
 ## Updating

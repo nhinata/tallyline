@@ -20,9 +20,14 @@ from .render import fmt_context, fmt_usd
 
 TAIL_BYTES = 4 << 20  # the latest usage and timestamps live at the end of a transcript
 LIFETIME = {"1h": 3600, "5m": 300}
+WINDOWS = os.name == "nt"
 
 
 def _alive(pid):
+    if WINDOWS:
+        # On Windows os.kill(pid, 0) terminates the process instead of probing it, so
+        # trust the session file there; a crashed session may linger in the list.
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

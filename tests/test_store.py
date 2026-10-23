@@ -135,3 +135,28 @@ def test_daily_rollup_matches_raw_rows_after_upserts(home):
     store.rescan(db)
     store.ingest(db)
     assert db.execute("SELECT SUM(input) FROM daily").fetchone()[0] == 3
+
+
+def test_ingest_skips_without_waiting_while_another_process_ingests(home):
+    path = paths.projects_dir() / "proj" / "s1.jsonl"
+    write(path, usage_line("m1", "r1", inp=5))
+    other = store.connect()
+    other.isolation_level = None
+    other.execute("BEGIN IMMEDIATE")  # another render holding the write lock
+    db = store.connect()
+    assert store.ingest(db) is False
+    assert all_rows(db) == []
+    other.execute("ROLLBACK")
+    assert store.ingest(db) is True
+    assert len(all_rows(db)) == 1
+
+
+def test_database_uses_wal_so_reads_do_not_wait_for_writes(home):
+    db = store.connect()
+    assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    writer = store.connect()
+    writer.isolation_level = None
+    writer.execute("BEGIN IMMEDIATE")
+    writer.execute("INSERT INTO files VALUES ('x', 1)")
+    assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0  # not blocked
+    writer.execute("COMMIT")
