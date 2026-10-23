@@ -1,6 +1,6 @@
 # tallyline
 
-A Claude Code status line that **tallies your token usage and API-equivalent cost by day, month and year**, across every session.
+A fast Claude Code status line that **tallies your token usage and API-equivalent cost by day, month and year** across every session, and tells you **why your usage is high**.
 
 ![tallyline status line on a Max plan](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
 
@@ -10,6 +10,15 @@ API billing:   [Opus 5.5] │ ctx 120k (12%)  6.6M tok (≈$3.85) │ Oct 22.1M 
 ```
 
 What to watch while working comes first and totals come last: this session (cyan), your whole account (magenta), all sessions on this machine (yellow).
+
+```bash
+pipx install tallyline && tallyline init    # then restart Claude Code
+```
+
+Beyond the status line:
+
+- `tallyline diagnose` shows what drove your usage (cache rewrites after idle breaks, tool outputs kept in context, long context) and what to change.
+- `tallyline sessions` lists your open sessions and what resuming each one costs once its cache has expired.
 
 [日本語版 README](README.ja.md)
 
@@ -181,6 +190,13 @@ New releases also carry the latest model prices.
 ```bash
 tallyline uninstall && pipx uninstall tallyline
 ```
+
+## Related projects
+
+- [ccusage](https://github.com/ryoppippi/ccusage) builds detailed daily, weekly, monthly and session reports for Claude Code and many other coding agents.
+- [ccstatusline](https://github.com/sirmalloc/ccstatusline) offers a highly customizable status line with many widgets and themes.
+
+tallyline keeps to a small, fixed status line plus two questions those tools don't focus on: why usage was high, and which open sessions are costly to resume.
 
 ## License
 

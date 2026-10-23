@@ -1,6 +1,6 @@
 # tallyline
 
-Claude Code の**全セッションのトークン使用量と API 換算の金額を、日・月・年ごとに集計して表示する**ステータスラインです。
+Claude Code の**全セッションのトークン使用量と API 換算の金額を、日・月・年ごとに集計して表示する**、高速なステータスラインです。**使用量が多い理由**も調べられます。
 
 ![Max プランでの tallyline の表示](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
 
@@ -10,6 +10,15 @@ API 従量課金：      [Opus 5.5] │ ctx 120k (12%)  6.6M tok (≈$3.85) │ 
 ```
 
 作業中に見る値を左に、累計を右端に並べています。このセッション（水色）、アカウント全体（紫）、このマシンの全セッション（黄色）の順です。
+
+```bash
+pipx install tallyline && tallyline init    # その後 Claude Code を再起動
+```
+
+ステータスライン以外の機能：
+
+- `tallyline diagnose`：使用量が多い原因（時間を空けた後のキャッシュの書き直し、コンテキストに残り続けるツールの出力、長いコンテキスト）と、その対策を表示します。
+- `tallyline sessions`：開いている会話の一覧と、キャッシュが切れた会話を再開するときの費用を表示します。
 
 ## 特徴
 
@@ -179,6 +188,13 @@ pipx upgrade tallyline      # または: uv tool upgrade tallyline
 ```bash
 tallyline uninstall && pipx uninstall tallyline
 ```
+
+## 関連プロジェクト
+
+- [ccusage](https://github.com/ryoppippi/ccusage)：Claude Code をはじめ、多くのコーディングエージェントの使用量を、日・週・月・セッションごとに詳しく集計します。
+- [ccstatusline](https://github.com/sirmalloc/ccstatusline)：多くのウィジェットとテーマを備えた、細かく設定できるステータスラインです。
+
+tallyline は、表示を小さく固定したステータスラインに加えて、これらのツールが重点を置いていない2つの問い（使用量がなぜ多かったか、開いている会話のどれが再開すると高くつくか）に絞っています。
 
 ## ライセンス
 
