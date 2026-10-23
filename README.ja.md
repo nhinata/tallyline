@@ -85,6 +85,45 @@ tallyline diagnose --no-titles       # セッション名・プロジェクト�
 
 実行したときだけ会話ログを直接読むので、ステータスラインの速さは変わりません。Claude Code は古い会話ログを削除するため（注意事項を参照）、調べられるのは手元に残っている期間だけです。
 
+## 再開すると高くつく会話を見つける
+
+会話をいくつも開いていると、どこで何をしていたか、続きを再開するとどれくらいかかるかが分からなくなりがちです。`tallyline sessions` は、動いている Claude Code の会話を一覧にします。
+
+```
+$ tallyline sessions
+6 open Claude Code sessions · 4 with an expired cache
+Resuming all of them writes 612k tokens again (≈$4.90 API-equivalent).
+
+ #  Last message  Where             State  Context  Cache    Resume  Title
+ 1  now           tmux work:1 api   busy      142k  warm             Add rate limiting to the API
+ 2  25m ago       tmux work:2 web   idle       64k  warm             Fix login redirect loop
+ 3  5h ago        ttys004           idle      231k  expired  ≈$1.85  Migrate billing to the new schema
+ 4  20h ago       tmux work:3 docs  idle      121k  expired  ≈$0.97  Write the release notes
+ 5  2.4d ago      ttys002           idle      174k  expired  ≈$1.39  Investigate flaky checkout test
+ 6  6.1d ago      background        idle       86k  expired  ≈$0.69  Draft the onboarding guide
+
+Resume: an expired session writes its whole context to the cache again on the next message.
+Closing a session keeps the conversation; claude --resume picks it up later.
+```
+
+| 列 | 意味 |
+|---|---|
+| Last message | 最後の発言からの経過時間 |
+| Where | tmux のセッション・ウィンドウ番号・名前、ターミナル（tty）、またはバックグラウンド（`background`） |
+| Context | 今のコンテキストの大きさ。キャッシュが切れている会話では、次の発言でこれがまるごと書き直されます |
+| Cache | キャッシュの期限（その会話が直近で使った5分または1時間）が過ぎていなければ `warm` |
+| Resume | 次の発言でコンテキストを書き直す費用（API 料金換算の目安） |
+
+表示するだけで、会話を閉じるかどうかは利用者が判断します。会話を閉じても内容は消えず、`claude --resume` で再開できます。バックグラウンドに移した会話は、元の行に `(continued as #n)` と表示されます。
+
+```bash
+tallyline sessions --sort resume   # 再開の費用が高い順
+tallyline sessions --json          # スクリプト向け
+tallyline sessions --no-titles     # タイトル・ディレクトリ・tmux のウィンドウ名を隠す
+```
+
+Claude Code が `~/.claude/sessions/` に置いている会話ごとのファイルを読みます。このファイルは公式に説明されていないため、Claude Code の更新で形式が変わる可能性があります。
+
 ## 設定
 
 ```bash

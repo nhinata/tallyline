@@ -87,6 +87,45 @@ tallyline diagnose --no-titles       # hide session titles, projects and file na
 
 It reads the transcripts directly and only when you run it, so the status line stays as fast as before. Claude Code deletes old transcripts (see Caveats), so the look-back is limited to what is still on disk.
 
+## Finding sessions that are costly to resume
+
+With several sessions open, it is easy to lose track of which one holds what, and of how much picking one up again will cost. `tallyline sessions` lists every running Claude Code session:
+
+```
+$ tallyline sessions
+6 open Claude Code sessions · 4 with an expired cache
+Resuming all of them writes 612k tokens again (≈$4.90 API-equivalent).
+
+ #  Last message  Where             State  Context  Cache    Resume  Title
+ 1  now           tmux work:1 api   busy      142k  warm             Add rate limiting to the API
+ 2  25m ago       tmux work:2 web   idle       64k  warm             Fix login redirect loop
+ 3  5h ago        ttys004           idle      231k  expired  ≈$1.85  Migrate billing to the new schema
+ 4  20h ago       tmux work:3 docs  idle      121k  expired  ≈$0.97  Write the release notes
+ 5  2.4d ago      ttys002           idle      174k  expired  ≈$1.39  Investigate flaky checkout test
+ 6  6.1d ago      background        idle       86k  expired  ≈$0.69  Draft the onboarding guide
+
+Resume: an expired session writes its whole context to the cache again on the next message.
+Closing a session keeps the conversation; claude --resume picks it up later.
+```
+
+| Column | Meaning |
+|---|---|
+| Last message | Time since the last message in the session |
+| Where | The tmux session, window and name, the terminal (tty), or `background` |
+| Context | Size of the context now. For an expired session, this is what the next message writes again |
+| Cache | `warm` while the cache lifetime (5 minutes or 1 hour, whichever the session last used) has not passed |
+| Resume | API-equivalent cost of writing the context again on the next message |
+
+It only reports; whether to close a session is up to you. A session moved to the background shows `(continued as #n)` on its original entry.
+
+```bash
+tallyline sessions --sort resume   # most expensive to resume first
+tallyline sessions --json          # for scripts
+tallyline sessions --no-titles     # hide titles, directories and tmux window names
+```
+
+It reads the per-session files Claude Code keeps in `~/.claude/sessions/`. They are undocumented and may change between Claude Code versions.
+
 ## Configuration
 
 ```bash
