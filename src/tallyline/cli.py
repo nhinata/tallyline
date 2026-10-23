@@ -128,6 +128,14 @@ def cmd_diagnose(args):
         sys.exit(str(e))
 
 
+def cmd_sessions(args):
+    from . import pricing, sessions
+
+    prices = pricing.load(config.load().get("prices"))
+    print(sessions.run(as_json=args.json, show_titles=not args.no_titles, sort=args.sort,
+                       prices=prices))
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if not argv:  # the status line hot path: skip argparse and its imports
@@ -160,7 +168,13 @@ def main(argv=None):
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.add_argument("--no-titles", action="store_true",
                    help="hide session titles, projects and file paths")
+    p = sub.add_parser("sessions", help="list open sessions and what resuming each one costs")
+    p.add_argument("--sort", choices=("recent", "resume"), default="recent",
+                   help="order by last message (default) or by resume cost")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("--no-titles", action="store_true",
+                   help="hide session titles, directories and tmux window names")
     args = parser.parse_args(argv)
     handlers = {"init": cmd_init, "uninstall": cmd_uninstall, "config": cmd_config,
-                "rebuild": cmd_rebuild, "diagnose": cmd_diagnose}
+                "rebuild": cmd_rebuild, "diagnose": cmd_diagnose, "sessions": cmd_sessions}
     handlers.get(args.cmd, cmd_render)(args)
