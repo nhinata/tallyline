@@ -134,7 +134,7 @@ def rate_limits(info, db, now=None):
         # with it: billed by the API (e.g. a cancelled plan). A resumed session whose last
         # response predates that observation is just waiting for its first new response.
         return None
-    recorded = {k: v for k, v in store.limits(db).items() if v[1] > now - STALE_AFTER}
+    recorded = {k: v for k, v in store.limits(db, now).items() if v[1] > now - STALE_AFTER}
     if not recorded:
         return None
     parts = []
