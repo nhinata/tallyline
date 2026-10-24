@@ -261,10 +261,34 @@ _UPDATE_LIMIT = """
 """
 
 
+# The longest each window runs. A reset further ahead than this (plus slack for clock
+# differences) cannot come from Claude Code; storing it would block every real update,
+# since a window is only replaced by one that resets later.
+WINDOW_SECONDS = {"five_hour": 5 * 3600, "seven_day": 7 * 86400}
+RESET_SLACK = 3600
+
+
+def _latest_plausible_reset(window, now):
+    span = WINDOW_SECONDS.get(window)
+    return None if span is None else now + span + RESET_SLACK
+
+
+def _plausible(window, resets_at, now):
+    latest = _latest_plausible_reset(window, now)
+    return latest is None or resets_at <= latest
+
+
 def update_limits(db, received, now):
     """received: {window: (pct, resets_at)} as sent by Claude Code for this session."""
+    received = {w: v for w, v in received.items() if _plausible(w, v[1], now)}
+    if not received:
+        return
     try:
         with db:
+            # drop a record that could never be replaced, so this value can take its place
+            db.executemany("DELETE FROM limits WHERE window = ? AND resets_at > ?",
+                           [(w, int(_latest_plausible_reset(w, now))) for w in received
+                            if _latest_plausible_reset(w, now) is not None])
             db.executemany(_UPDATE_LIMIT, [(w, p, r) for w, (p, r) in received.items()])
             # refresh the observation time at most once a minute to avoid a write per render
             db.executemany("UPDATE limits SET observed_at = ? WHERE window = ? AND observed_at < ?",
@@ -279,9 +303,11 @@ def limits_last_observed(db):
     return db.execute("SELECT MAX(observed_at) FROM limits").fetchone()[0] or 0
 
 
-def limits(db):
-    """{window: (pct, resets_at)} for every window ever recorded."""
-    return {w: (p, r) for w, p, r in db.execute("SELECT window, pct, resets_at FROM limits")}
+def limits(db, now=None):
+    """{window: (pct, resets_at)} for every recorded window with a plausible reset time."""
+    now = now or time.time()
+    return {w: (p, r) for w, p, r in db.execute("SELECT window, pct, resets_at FROM limits")
+            if _plausible(w, r, now)}
 
 
 def last_response(db, session_id):

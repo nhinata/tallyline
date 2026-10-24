@@ -158,6 +158,26 @@ def test_new_session_shows_recorded_limits_before_first_response(home):
     assert render.rate_limits({"session_id": "new"}, db) == "5h 23%  7d 41%"
 
 
+def test_reset_time_beyond_the_window_length_is_never_recorded(home):
+    db = setup_db([])
+    now = time.time()
+    render.rate_limits(limits_info(five_hour=(9, 9_999_999_999), seven_day=(41, LATER)), db, now=now)
+    assert "five_hour" not in store.limits(db, now)
+    assert render.rate_limits(limits_info(five_hour=(23, SOON)), db, now=now) == "5h 23%  7d 41%"
+
+
+def test_existing_implausible_record_is_ignored_and_replaced(home):
+    # a record written before this check existed (e.g. by a manual test) used to stick
+    db = setup_db([])
+    now = time.time()
+    with db:
+        db.execute("INSERT INTO limits (window, pct, resets_at, observed_at) VALUES (?,?,?,?)",
+                   ("five_hour", 9, 9_999_999_999, int(now)))
+    assert render.rate_limits({"session_id": "s1"}, db, now=now) is None
+    assert render.rate_limits(limits_info(five_hour=(23, SOON)), db, now=now) == "5h 23%"
+    assert store.limits(db, now)["five_hour"] == (23, SOON)
+
+
 def test_reset_window_shows_zero_instead_of_disappearing(home):
     db = setup_db([])
     now = time.time()
@@ -174,10 +194,12 @@ def test_stale_lower_value_from_idle_session_is_ignored(home):
 
 def test_rollover_replaces_and_old_window_snapshot_is_ignored(home):
     db = setup_db([])
-    render.rate_limits(limits_info(seven_day=(90, LATER)), db)
-    render.rate_limits(limits_info(seven_day=(3, LATER + 7 * 86400)), db)   # new window
-    render.rate_limits(limits_info(seven_day=(95, LATER)), db)              # stale old window
-    assert store.limits(db)["seven_day"] == (3.0, LATER + 7 * 86400)
+    old_reset = int(time.time()) + 600
+    new_reset = old_reset + 7 * 86400
+    render.rate_limits(limits_info(seven_day=(90, old_reset)), db)
+    render.rate_limits(limits_info(seven_day=(3, new_reset)), db)    # new window
+    render.rate_limits(limits_info(seven_day=(95, old_reset)), db)   # stale old window
+    assert store.limits(db)["seven_day"] == (3.0, new_reset)
 
 
 def test_reset_time_jitter_counts_as_same_window(home):
