@@ -6,3 +6,4 @@ build/
 *.egg-info/
 src/tallyline/_version.py
 .pytest_cache/
+.DS_Store
