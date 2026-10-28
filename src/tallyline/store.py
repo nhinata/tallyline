@@ -167,7 +167,8 @@ def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
     Returns False without waiting when another process is already ingesting; the caller
     then renders from what is stored, which that process is about to bring up to date.
     """
-    root = root or paths.projects_dir()
+    # absolute, so a relative CLAUDE_CONFIG_DIR used from two directories can't collide
+    root = (root or paths.projects_dir()).absolute()
     files = list(root.glob("**/*.jsonl"))
     if not _changed(db, root, files):
         return True

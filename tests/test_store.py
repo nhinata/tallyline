@@ -180,3 +180,13 @@ def test_unreadable_transcript_is_not_taken_for_deleted(monkeypatch):
         raise PermissionError(path)
     monkeypatch.setattr(store.os, "stat", denied)
     assert not store._missing("/x/s.jsonl")
+
+
+def test_relative_config_dir_is_stored_as_absolute_paths(home, monkeypatch):
+    monkeypatch.chdir(home)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "claude")
+    log = paths.projects_dir() / "proj" / "s.jsonl"
+    write(log, usage_line("m1", "r1"))
+    db = store.connect()
+    store.ingest(db)
+    assert db.execute("SELECT path FROM files").fetchall() == [(str(home / log),)]
