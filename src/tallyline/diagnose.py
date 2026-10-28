@@ -381,7 +381,8 @@ def _files(files, show_titles, limit=None):
     if show_titles:
         return ", ".join(f"{Path(x['path']).name} ×{x['reads']}" for x in shown) + more
     reads = ", ".join(f"×{x['reads']}" for x in shown)
-    return f"{len(files)} file{'s' if len(files) != 1 else ''} ({reads}{more})"
+    count = len({x["path"] for x in files})  # one file may repeat in several sessions
+    return f"{count} file{'s' if count != 1 else ''} ({reads}{more})"
 
 
 def _pct(x):

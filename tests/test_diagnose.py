@@ -143,6 +143,7 @@ def test_repeated_files_without_titles_are_counted_not_named(home):
     files = [{"path": f"/x/{c}.md", "reads": 3} for c in "abcd"]
     assert diagnose._files(files, True, 3) == "a.md ×3, b.md ×3, c.md ×3, …"
     assert diagnose._files(files, False, 3) == "4 files (×3, ×3, ×3, …)"
+    assert diagnose._files(files[:1] * 2, False) == "1 file (×3, ×3)"
     assert "Read repeatedly: 2 files (×3, ×3)" in diagnose.session_report(
         r, "s1", {}, {}, show_titles=False)
 
