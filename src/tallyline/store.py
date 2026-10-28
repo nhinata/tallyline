@@ -7,6 +7,7 @@ response streams. Costs are not stored: they are computed at query time so a pri
 table update applies retroactively.
 """
 import json
+import os
 import sqlite3
 import time
 from datetime import datetime
@@ -166,13 +167,14 @@ def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
     Returns False without waiting when another process is already ingesting; the caller
     then renders from what is stored, which that process is about to bring up to date.
     """
-    root = root or paths.projects_dir()
+    # absolute, so a relative CLAUDE_CONFIG_DIR used from two directories can't collide
+    root = (root or paths.projects_dir()).absolute()
     files = list(root.glob("**/*.jsonl"))
-    if not _changed(db, files):
+    if not _changed(db, root, files):
         return True
     try:
         with _write_lock(db, wait_ms=wait_ms):
-            _ingest(db, files)
+            _ingest(db, root, files)
     except sqlite3.OperationalError as e:
         if "locked" not in str(e) and "busy" not in str(e):
             raise
@@ -180,7 +182,7 @@ def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
     return True
 
 
-def _changed(db, files):
+def _changed(db, root, files):
     offsets = dict(db.execute("SELECT path, offset FROM files"))
     for path in files:
         try:
@@ -188,10 +190,33 @@ def _changed(db, files):
                 return True
         except OSError:
             continue
+    return bool(_gone(offsets, root, files))
+
+
+def _gone(offsets, root, files):
+    """Offsets of transcripts Claude Code has deleted from this root.
+
+    Checked on disk, not against the listing, since another process may have recorded a
+    file created after it was taken. Other roots and unreadable paths are kept: a volume
+    that is not mounted or a permission error is not a deletion.
+    """
+    present = {str(p) for p in files}
+    prefix = str(root) + os.sep
+    return [k for k in offsets
+            if k.startswith(prefix) and k not in present and _missing(k)]
+
+
+def _missing(path):
+    try:
+        os.stat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        pass
     return False
 
 
-def _ingest(db, files):
+def _ingest(db, root, files):
     # read offsets again inside the lock: another process may have just ingested
     offsets = dict(db.execute("SELECT path, offset FROM files"))
     rows, new_offsets = [], []
@@ -217,6 +242,8 @@ def _ingest(db, files):
             if row:
                 rows.append(row)
         new_offsets.append((key, start + end))
+    db.executemany("DELETE FROM files WHERE path = ?",
+                   [(k,) for k in _gone(offsets, root, files)])
     if new_offsets:
         db.executemany(UPSERT, rows)
         db.executemany("INSERT OR REPLACE INTO files VALUES (?,?)", new_offsets)
