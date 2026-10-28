@@ -105,15 +105,13 @@ def test_history_survives_transcript_deletion_and_rebuild(home):
 def test_offsets_of_deleted_transcripts_are_forgotten_but_rows_kept(home):
     log = paths.projects_dir() / "proj" / "s.jsonl"
     write(log, usage_line("m1", "r1"))
-    elsewhere = home / "other-root" / "x.jsonl"  # still on disk, under another root
-    elsewhere.parent.mkdir()
-    write(elsewhere, "")
     db = store.connect()
-    db.execute("INSERT INTO files VALUES (?, 10)", (str(elsewhere),))
+    elsewhere = str(home / "unmounted" / "x.jsonl")  # another root, not available now
+    db.execute("INSERT INTO files VALUES (?, 10)", (elsewhere,))
     store.ingest(db)
     log.unlink()  # nothing else changes, and the offset is still dropped
     store.ingest(db)
-    assert [p for p, in db.execute("SELECT path FROM files")] == [str(elsewhere)]
+    assert [p for p, in db.execute("SELECT path FROM files")] == [elsewhere]
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
 
 
@@ -175,3 +173,10 @@ def test_database_uses_wal_so_reads_do_not_wait_for_writes(home):
     writer.execute("INSERT INTO files VALUES ('x', 1)")
     assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0  # not blocked
     writer.execute("COMMIT")
+
+
+def test_unreadable_transcript_is_not_taken_for_deleted(monkeypatch):
+    def denied(path):
+        raise PermissionError(path)
+    monkeypatch.setattr(store.os, "stat", denied)
+    assert not store._missing("/x/s.jsonl")
