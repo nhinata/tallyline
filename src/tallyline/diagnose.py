@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import paths, pricing
-from .render import fmt_tokens, fmt_usd
+from .render import fmt_context, fmt_tokens, fmt_usd
 
 LONG_CONTEXT = 200_000
 # An idle gap counts as the cause of a rewrite only when that rewrite is substantial.
@@ -34,6 +34,7 @@ IMAGE_CHARS = 3000  # weight of an image block when splitting context growth by 
 CHARS_PER_TOKEN = 3  # fallback when context growth can't be measured
 REPEAT_MIN = 3
 TOP = 5
+MIN_CAUSE_SHARE = 0.01  # causes below this share are left out of Top causes
 
 ADVICE = {
     "expired": "Before a long break, /compact or start a new session.",
@@ -373,8 +374,14 @@ def _label(output, show_titles):
     return output["label"] if show_titles else output["tool"]
 
 
-def _file(path, show_titles):
-    return Path(path).name if show_titles else "a file"
+def _files(files, show_titles, limit=None):
+    """'a.md ×3, b.py ×4'; without titles '2 files (×3, ×4)', since every name would read 'a file'."""
+    shown = files[:limit]
+    more = ", …" if len(files) > len(shown) else ""
+    if show_titles:
+        return ", ".join(f"{Path(x['path']).name} ×{x['reads']}" for x in shown) + more
+    reads = ", ".join(f"×{x['reads']}" for x in shown)
+    return f"{len(files)} file{'s' if len(files) != 1 else ''} ({reads}{more})"
 
 
 def _pct(x):
@@ -411,16 +418,16 @@ def text_report(report, days, titles, show_titles=True):
     if e["count"]:
         blocks.append((e["cost"], "Resumed after the cache expired", e["share"], [
             f"{e['count']} requests after an idle gap wrote the context again"
-            f" (avg {fmt_tokens(e['tokens'] / e['count'])} tokens).",
+            f" (avg {fmt_context(e['tokens'] / e['count'])} tokens).",
         ], ADVICE["expired"]))
     lc = c["long"]
     if lc["requests"]:
         biggest = sorted(report["session_list"], key=lambda s: -s["peak_context"])[:2]
         blocks.append((lc["cost"], "Long context (overlaps the others)", lc["share"], [
             f"{_pct(_share(lc['requests'], report['requests']))} of requests ran above"
-            f" {fmt_tokens(lc['threshold'])} tokens of context.",
+            f" {fmt_context(lc['threshold'])} tokens of context.",
             "Largest: " + ", ".join(f"{_title(s['id'], titles, show_titles)}"
-                                    f" ({fmt_tokens(s['peak_context'])})" for s in biggest),
+                                    f" ({fmt_context(s['peak_context'])})" for s in biggest),
         ], ADVICE["long"]))
     tc = c["tools"]
     if tc["cost"]:
@@ -434,10 +441,11 @@ def text_report(report, days, titles, show_titles=True):
     rc = c["repeats"]
     if rc["files"]:
         blocks.append((rc["cost"], "Same file read repeatedly (part of tool outputs)",
-                       rc["share"], [", ".join(
-                           f"{_file(x['path'], show_titles)} ×{x['reads']}" for x in rc["files"][:3])
-                           + " (each within a single session)"], ADVICE["repeats"]))
+                       rc["share"], [_files(rc["files"], show_titles, 3)
+                                     + " (each within a single session)"], ADVICE["repeats"]))
 
+    if total:  # with no prices every share is 0, and the counts are still worth showing
+        blocks = [b for b in blocks if b[2] >= MIN_CAUSE_SHARE]
     if blocks:
         lines += ["", "Top causes"]
         width = max(len(b[1]) for b in blocks)
@@ -464,12 +472,12 @@ def session_report(report, sid, titles, projects, show_titles=True):
         head += f" · {projects[sid].replace(str(Path.home()), '~')}"
     lines = [head,
              f"  {_day(s['first'])} → {_day(s['last'])} · {s['requests']:,} requests"
-             f" · ≈{fmt_usd(s['cost'])} · peak context {fmt_tokens(s['peak_context'])}"]
+             f" · ≈{fmt_usd(s['cost'])} · peak context {fmt_context(s['peak_context'])}"]
     if s["expired"]["count"]:
         lines.append(f"  Resumed after the cache expired: {s['expired']['count']}×"
                      f" ≈{fmt_usd(s['expired']['cost'])}")
     if s["long"]:
-        lines.append(f"  Spent on context above {fmt_tokens(LONG_CONTEXT)}: ≈{fmt_usd(s['long'])}")
+        lines.append(f"  Spent on context above {fmt_context(LONG_CONTEXT)}: ≈{fmt_usd(s['long'])}")
     if s["compactions"]:
         lines.append(f"  Compactions: {s['compactions']}")
     outputs = sorted((o for o in report["_outputs"] if o["session"] == sid and o["cost"]),
@@ -480,8 +488,7 @@ def session_report(report, sid, titles, projects, show_titles=True):
                   f" carried {o['turns']} turns)" for o in outputs]
     repeats = [x for x in report["causes"]["repeats"]["files"] if x["session"] == sid]
     if repeats:
-        lines.append("  Read repeatedly: " + ", ".join(
-            f"{_file(x['path'], show_titles)} ×{x['reads']}" for x in repeats))
+        lines.append("  Read repeatedly: " + _files(repeats, show_titles))
     return "\n".join(lines)
 
 

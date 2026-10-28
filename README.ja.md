@@ -69,7 +69,7 @@ Last 30 days · 9 sessions · 2,087 requests · ≈$331.83 API-equivalent
 
 Top causes
  1. Resumed after the cache expired                    ≈$122.81   37%
-    72 requests after an idle gap wrote the context again (avg 384.0k tokens).
+    72 requests after an idle gap wrote the context again (avg 384k tokens).
     → Before a long break, /compact or start a new session.
  2. Tool outputs kept in context                       ≈$102.28   31%
     claude-in-chrome 74% · Read 17% · Bash 6% · Edit 1%
@@ -84,6 +84,8 @@ Top causes
 | Tool outputs kept in context（文脈に残ったツール出力） | ツールの出力が最初に送られてから、セッションの終わりか圧縮（/compact）までの間に、その出力の分としてかかった書き込み・読み込みの費用。出力の大きさは文脈の増え方から求めます |
 | Long context（長い文脈） | 各リクエストのキャッシュ読み込みのうち、20万トークンを超えた部分の費用。上の2つと重なります |
 | Same file read repeatedly（同じファイルの繰り返し読み込み） | 1つのセッションの中で同じファイルを読み直した分。ツール出力の内訳の一部です |
+
+全体の1%に満たない原因は表示しません。
 
 ```bash
 tallyline diagnose --days 7          # 直近7日を調べる（初期設定は30日）

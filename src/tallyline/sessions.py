@@ -188,7 +188,7 @@ def collect(prices, now=None, table=None, panes=None):
             "where": where, "title": info["title"] or d.get("name"), "last_message": last,
             "idle_seconds": idle, "context": info["context"], "model": info["model"],
             "cache": "expired" if expired else "warm", "cache_lifetime": ttl,
-            "resume_cost": cost, "this_session": pid in mine,
+            "resume_cost": cost, "this_session": pid in mine, "has_transcript": t is not None,
             "job_id": d.get("jobId"), "parked_job_id": d.get("parkedJobId"),
         })
     sessions.sort(key=lambda s: -(s["last_message"] or 0))
@@ -220,7 +220,8 @@ def _ago(seconds):
         return f"{seconds / 60:.0f}m ago"
     if seconds < 48 * 3600:
         return f"{seconds / 3600:.0f}h ago"
-    return f"{seconds / 86400:.1f}d ago"
+    days = seconds / 86400
+    return f"{days:.1f}d ago" if days < 9.95 else f"{days:.0f}d ago"  # 9.96 is not "10.0d"
 
 
 def _where(w, show_titles):
@@ -243,6 +244,8 @@ def _title(s, show_titles):
     notes = []
     if s["this_session"]:
         notes.append("this session")
+    if not s["has_transcript"]:
+        notes.append("no transcript")
     if s["continued_as"]:
         notes.append(f"continued as #{s['continued_as']}")
     return title + (f"  ({', '.join(notes)})" if notes else "")

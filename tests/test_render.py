@@ -106,8 +106,8 @@ def test_context_before_first_response_shows_percentage_only():
 
 
 def test_context_size_formatting():
-    assert [render.fmt_context(n) for n in (999, 12_345, 969_400, 1_000_000)] == \
-        ["999", "12k", "969k", "1.0M"]
+    assert [render.fmt_context(n) for n in (999, 12_345, 969_400, 999_700, 1_000_000)] == \
+        ["999", "12k", "969k", "1.0M", "1.0M"]
 
 
 def test_range_start_and_labels():

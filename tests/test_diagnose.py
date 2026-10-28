@@ -123,6 +123,46 @@ def test_same_file_read_repeatedly_in_one_session(home):
     assert [(f["path"], f["reads"]) for f in files] == [("/x/a.md", 3)]
 
 
+def read_three_times(log, start, paths_):
+    """Reads each path three times in one session, so each counts as a repeated read."""
+    for i in range(3):
+        for j, path in enumerate(paths_):
+            n = i * len(paths_) + j
+            log.call(start + n * 10, read=10_000 * n, w1h=10_000,
+                     tools=[(f"t{n}", "Read", {"file_path": path})])
+            log.result(f"t{n}", 1_000)
+    log.call(start + 100, read=80_000)
+
+
+def test_repeated_files_without_titles_are_counted_not_named(home):
+    read_three_times(Log(), NOW - 600, ["/x/a.md", "/x/b.md"])
+    r = report()
+    hidden = diagnose.text_report(r, 30, {}, show_titles=False)
+    assert "2 files (×3, ×3)" in hidden and "a file ×" not in hidden and "a.md" not in hidden
+    assert "a.md ×3, b.md ×3" in diagnose.text_report(r, 30, {})
+    files = [{"path": f"/x/{c}.md", "reads": 3} for c in "abcd"]
+    assert diagnose._files(files, True, 3) == "a.md ×3, b.md ×3, c.md ×3, …"
+    assert diagnose._files(files, False, 3) == "4 files (×3, ×3, ×3, …)"
+    assert "Read repeatedly: 2 files (×3, ×3)" in diagnose.session_report(
+        r, "s1", {}, {}, show_titles=False)
+
+
+def test_causes_below_one_percent_are_left_out(home):
+    log = Log()
+    read_three_times(log, NOW - 600, ["/x/a.md"])
+    log.call(NOW - 300, w1h=50_000_000)
+    r = report()
+    assert r["causes"]["repeats"]["files"] and r["causes"]["repeats"]["share"] < 0.01
+    assert "Same file read repeatedly" not in diagnose.text_report(r, 30, {})
+
+
+def test_causes_are_kept_when_nothing_has_a_price(home):
+    read_three_times(Log(), NOW - 600, ["/x/a.md"])
+    threads, _, _ = diagnose.load_threads(since=0)
+    r = diagnose.analyze(threads, {}, NOW - 30 * DAY)
+    assert r["cost"] == 0 and "Same file read repeatedly" in diagnose.text_report(r, 30, {})
+
+
 def test_long_context_counts_the_part_above_the_threshold(home):
     Log().call(NOW - 600, read=300_000)
     lc = report()["causes"]["long"]
@@ -160,6 +200,7 @@ def test_text_report_and_hiding_titles(home):
     r = diagnose.analyze(threads, PRICES, NOW - 30 * DAY)
     shown = diagnose.text_report(r, 30, titles)
     assert "Resumed after the cache expired" in shown and "secret project" in shown
+    assert "(avg 300k tokens)" in shown
     hidden = diagnose.text_report(r, 30, titles, show_titles=False)
     assert "secret" not in hidden and "private.md" not in hidden
     as_json = json.loads(diagnose.json_report(r, titles, projects, show_titles=False))

@@ -71,7 +71,7 @@ Last 30 days · 9 sessions · 2,087 requests · ≈$331.83 API-equivalent
 
 Top causes
  1. Resumed after the cache expired                    ≈$122.81   37%
-    72 requests after an idle gap wrote the context again (avg 384.0k tokens).
+    72 requests after an idle gap wrote the context again (avg 384k tokens).
     → Before a long break, /compact or start a new session.
  2. Tool outputs kept in context                       ≈$102.28   31%
     claude-in-chrome 74% · Read 17% · Bash 6% · Edit 1%
@@ -86,6 +86,8 @@ Top causes
 | Tool outputs kept in context | Each tool output's share of cache writes and reads, from the request that first sent it until the session ends or is compacted. Its size comes from how much the context grew |
 | Long context | The part of each cache read above 200k tokens. This overlaps the causes above |
 | Same file read repeatedly | Re-reads of a file within one session, as part of tool outputs |
+
+Causes under 1% of the total are left out.
 
 ```bash
 tallyline diagnose --days 7          # look back 7 days (default 30)
