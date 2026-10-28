@@ -7,6 +7,7 @@ response streams. Costs are not stored: they are computed at query time so a pri
 table update applies retroactively.
 """
 import json
+import os
 import sqlite3
 import time
 from datetime import datetime
@@ -188,7 +189,14 @@ def _changed(db, files):
                 return True
         except OSError:
             continue
-    return False
+    return bool(_gone(offsets, files))
+
+
+def _gone(offsets, files):
+    """Offsets of transcripts Claude Code has deleted. Checked on disk, not against the
+    listing, since another process may have recorded a file created after it was taken."""
+    present = {str(p) for p in files}
+    return [k for k in offsets if k not in present and not os.path.exists(k)]
 
 
 def _ingest(db, files):
@@ -217,6 +225,7 @@ def _ingest(db, files):
             if row:
                 rows.append(row)
         new_offsets.append((key, start + end))
+    db.executemany("DELETE FROM files WHERE path = ?", [(k,) for k in _gone(offsets, files)])
     if new_offsets:
         db.executemany(UPSERT, rows)
         db.executemany("INSERT OR REPLACE INTO files VALUES (?,?)", new_offsets)
