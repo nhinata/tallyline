@@ -83,7 +83,7 @@ def usage_text(tokens, usd, unknown, show_cost, style, color):
 
 def fmt_context(n):
     """Context size in whole thousands: 384k, not 384.2k."""
-    if n >= 1e6:
+    if n >= 999_500:  # would otherwise round up to "1000k"
         return f"{n / 1e6:.1f}M"
     return f"{n / 1e3:.0f}k" if n >= 1e3 else str(int(n))
 

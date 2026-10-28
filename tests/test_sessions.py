@@ -120,6 +120,20 @@ def test_text_report_and_hiding_titles(home):
     assert "Secret" not in as_json and "/secret/project" not in as_json
 
 
+def test_ten_or_more_days_ago_is_shown_in_whole_days(home):
+    session_file(ME, "a1")
+    transcript("a1", "Old", [(NOW - 12.4 * 86400, 1_000, 1_000, 0)])
+    assert "12d ago" in sessions.text_report(collect())
+    assert [sessions._ago(d * 86400) for d in (9.9, 9.96)] == ["9.9d ago", "10d ago"]
+
+
+def test_session_without_a_transcript_says_so(home):
+    session_file(ME, "a1", updatedAt=(NOW - 3600) * 1000)
+    s = collect()[0]
+    assert not s["has_transcript"] and s["context"] == 0
+    assert "no transcript" in sessions.text_report([s])
+
+
 def test_sort_by_resume_cost(home):
     session_file(ME, "small")
     transcript("small", None, [(NOW - 7200, 10_000, 1_000, 0)])
