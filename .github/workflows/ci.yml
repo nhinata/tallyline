@@ -18,11 +18,16 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-        # macOS runners are few; the oldest and newest Python cover what differs by OS
+        # every Python on one OS; other OSes only at the oldest and newest Python, since
+        # what differs by OS doesn't depend on the version (and macOS runners are few)
         include:
           - os: macos-latest
             python: "3.9"
           - os: macos-latest
+            python: "3.14"
+          - os: windows-latest
+            python: "3.9"
+          - os: windows-latest
             python: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
