@@ -87,7 +87,7 @@ def cmd_init(args):
     settings["statusLine"] = {"type": "command", "command": status_command()}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Added tallyline to {path}. Restart Claude Code to see it.")
+    print(f"Added tallyline to {path}. Claude Code picks it up without a restart.")
 
 
 def cmd_uninstall(_args):

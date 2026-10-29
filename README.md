@@ -2,7 +2,7 @@
 
 A fast Claude Code status line that **tallies your token usage and API-equivalent cost by day, month and year** across every session, and tells you **why your usage is high**.
 
-![tallyline status line on a Max plan](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
+![tallyline status line on a Pro plan](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
 
 ```
 Pro/Max plan:  [Opus 5.5] │ ctx 120k (12%) │ 5h 23%  7d 41% │ Oct 22.1M tok (≈$14.92)
@@ -12,7 +12,7 @@ API billing:   [Opus 5.5] │ ctx 120k (12%)  6.6M tok (≈$3.85) │ Oct 22.1M 
 What to watch while working comes first and totals come last: this session (cyan), your whole account (magenta), all sessions on this machine (yellow).
 
 ```bash
-pipx install tallyline && tallyline init    # then restart Claude Code
+pipx install tallyline && tallyline init
 ```
 
 Beyond the status line:
@@ -38,7 +38,7 @@ pipx install tallyline      # or: uv tool install tallyline
 tallyline init              # adds the statusLine entry to ~/.claude/settings.json
 ```
 
-Restart Claude Code. `init` backs up `settings.json` to `settings.json.bak`. It refuses to replace an existing status line unless you pass `--force`.
+Claude Code reloads `settings.json` when it changes, so the status line appears without a restart. `init` backs up `settings.json` to `settings.json.bak`. It refuses to replace an existing status line unless you pass `--force`.
 
 ## What it shows
 
