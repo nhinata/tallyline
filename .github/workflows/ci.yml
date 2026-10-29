@@ -5,13 +5,25 @@ on:
     branches: [main]
   pull_request:
 
+# a new push to a pull request replaces its run; each run on main has its own group,
+# since a group keeps only one pending run and would drop the others
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # macOS runners are few; the oldest and newest Python cover what differs by OS
+        include:
+          - os: macos-latest
+            python: "3.9"
+          - os: macos-latest
+            python: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
