@@ -24,9 +24,9 @@ SANS = "/System/Library/Fonts/HelveticaNeue.ttc"
 
 # the status line, split into colored runs as tallyline prints it
 STATUS = [
-    ("[Opus 5.5]", GRAY), (" │ ", BORDER), ("ctx 120k (12%)", CYAN), (" │ ", BORDER),
-    ("5h 23%  7d 41%", MAGENTA), (" │ ", BORDER), ("Oct 22.1M tok ", YELLOW),
-    ("(≈$14.92)", DIM_YELLOW),
+    ("[Opus 5.5]", GRAY), (" │ ", BORDER), ("ctx 165k (16%)", CYAN), (" │ ", BORDER),
+    ("5h 25%  7d 12%", MAGENTA), (" │ ", BORDER), ("Oct 1.1B tok ", YELLOW),
+    ("(≈$504.97)", DIM_YELLOW),
 ]
 
 
