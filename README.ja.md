@@ -2,7 +2,7 @@
 
 Claude Code の**全セッションのトークン使用量と API 換算の金額を、日・月・年ごとに集計して表示する**、高速なステータスラインです。**使用量が多い理由**も調べられます。
 
-![Max プランでの tallyline の表示](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
+![Pro プランでの tallyline の表示](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
 
 ```
 Pro / Max プラン：  [Opus 5.5] │ ctx 120k (12%) │ 5h 23%  7d 41% │ Oct 22.1M tok (≈$14.92)
@@ -12,7 +12,7 @@ API 従量課金：      [Opus 5.5] │ ctx 120k (12%)  6.6M tok (≈$3.85) │ 
 作業中に見る値を左に、累計を右端に並べています。このセッション（水色）、アカウント全体（紫）、このマシンの全セッション（黄色）の順です。
 
 ```bash
-pipx install tallyline && tallyline init    # その後 Claude Code を再起動
+pipx install tallyline && tallyline init
 ```
 
 ステータスライン以外の機能：
@@ -36,7 +36,7 @@ pipx install tallyline      # または: uv tool install tallyline
 tallyline init              # ~/.claude/settings.json に statusLine を追加
 ```
 
-追加したら Claude Code を再起動してください。`init` は実行前に `settings.json.bak` としてバックアップを作ります。すでに別のステータスラインが設定されている場合は置き換えません。置き換えたいときは `--force` を付けてください。
+Claude Code は `settings.json` の変更を自動で読み込むので、再起動しなくてもすぐに表示されます。`init` は実行前に `settings.json.bak` としてバックアップを作ります。すでに別のステータスラインが設定されている場合は置き換えません。置き換えたいときは `--force` を付けてください。
 
 ## 表示内容
 
