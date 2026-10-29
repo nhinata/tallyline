@@ -67,9 +67,15 @@ def test_recent_and_busy_sessions_are_warm(home):
     assert all(s["resume_cost"] is None for s in collect())
 
 
-def test_dead_and_unreadable_session_files_are_skipped(home):
-    session_file(dead_pid(), "gone")
+def test_unreadable_session_files_are_skipped(home):
+    session_file(ME, "a1")
     (paths.claude_dir() / "sessions" / "123.json").write_text("{not json")
+    assert [s["id"] for s in collect()] == ["a1"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows trusts the session file; see _alive")
+def test_sessions_of_dead_processes_are_skipped(home):
+    session_file(dead_pid(), "gone")
     session_file(ME, "a1")
     assert [s["id"] for s in collect()] == ["a1"]
 
