@@ -1,9 +1,12 @@
-name: CI
+name: Test
 
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 # a new push to a pull request replaces its run; each run on main has its own group,
 # since a group keeps only one pending run and would drop the others
@@ -30,11 +33,13 @@ jobs:
           - os: windows-latest
             python: "3.14"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e . pytest
