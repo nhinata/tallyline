@@ -15,16 +15,16 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
       - run: python scripts/update_prices.py
       # PRs opened with GITHUB_TOKEN don't trigger other workflows, so test here.
       - run: pip install -e . pytest && pytest -q
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           branch: update-prices
           commit-message: Update model prices from Anthropic pricing page
