@@ -219,6 +219,19 @@ def test_session_lookup_by_prefix(home):
         diagnose.run(session="zzz", prices=PRICES, now=NOW)
 
 
+def test_session_json_covers_only_that_session(home):
+    a, b = Log("a", "abc111"), Log("b", "def222")
+    a.call(NOW - 600, w1h=10_000)
+    b.call(NOW - 600, w1h=30_000, tools=[("t1", "Bash", {"command": "ls"})])
+    b.result("t1", 100)
+    b.call(NOW - 500, w1h=1_000, read=30_000)
+    out = json.loads(diagnose.run(session="abc1", as_json=True, prices=PRICES, now=NOW))
+    assert [s["id"] for s in out["session_list"]] == ["abc111"]
+    assert out["sessions"] == out["requests"] == 1
+    assert out["cost"] == out["session_list"][0]["cost"] == 0.04
+    assert out["causes"]["tools"]["by_tool"] == []
+
+
 def test_cli_with_no_usage(home, capsys):
     cli.main(["diagnose", "--days", "7"])
     assert "No Claude Code usage in the last 7 days" in capsys.readouterr().out

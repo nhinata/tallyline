@@ -526,8 +526,9 @@ def find_session(report, prefix):
 def run(days=30, session=None, as_json=False, show_titles=True, prices=None, now=None):
     """Text (or JSON) report for the last `days` days; raises LookupError for a bad --session."""
     since = (now or time.time()) - days * 86400
+    prices = prices if prices is not None else pricing.load()
     threads, titles, projects = load_threads(since=since)
-    report = analyze(threads, prices if prices is not None else pricing.load(), since)
+    report = analyze(threads, prices, since)
     if session:
         matches = find_session(report, session)
         if len(matches) != 1:
@@ -535,10 +536,8 @@ def run(days=30, session=None, as_json=False, show_titles=True, prices=None, now
                               if not matches else
                               f"{session!r} matches {len(matches)} sessions; use more characters")
         if as_json:
-            report = {**report, "session_list": [s for s in report["session_list"]
-                                                 if s["id"] == matches[0]]}
-            report["_outputs"] = []
-            return json_report(report, titles, projects, show_titles)
+            own = [t for t in threads if t.session == matches[0]]
+            return json_report(analyze(own, prices, since), titles, projects, show_titles)
         return session_report(report, matches[0], titles, projects, show_titles)
     if as_json:
         return json_report(report, titles, projects, show_titles)
