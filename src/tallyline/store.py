@@ -122,8 +122,12 @@ class _write_lock:
         self.db.isolation_level = self.level
 
 
+MAX_TIMESTAMP = 4_102_444_800  # 2100-01-01 UTC, within every platform's local time range
+MAX_TOKENS = 1 << 40  # per request, so that summing rows can't overflow SQLite's integers
+
+
 def parse_line(line):
-    """One transcript line -> usage row tuple, or None if it carries no usage."""
+    """One transcript line -> usage row tuple, or None if it carries no valid usage."""
     if b'"usage"' not in line:
         return None
     try:
@@ -131,18 +135,22 @@ def parse_line(line):
         msg = d["message"]
         u = msg["usage"]
         ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
+        created = u.get("cache_creation_input_tokens") or 0
+        split = u.get("cache_creation") or {}
+        w1h = split.get("ephemeral_1h_input_tokens") or 0
+        w5m = split.get("ephemeral_5m_input_tokens", created - w1h) or 0
+        texts = (d.get("sessionId"), msg.get("model"), u.get("speed"))
+        tokens = (u.get("input_tokens") or 0, u.get("output_tokens") or 0,
+                  w5m, w1h, u.get("cache_read_input_tokens") or 0)
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
-    created = u.get("cache_creation_input_tokens") or 0
-    split = u.get("cache_creation") or {}
-    w1h = split.get("ephemeral_1h_input_tokens") or 0
-    w5m = split.get("ephemeral_5m_input_tokens", created - w1h) or 0
-    return (
-        f"{msg.get('id')}:{d.get('requestId')}", int(ts), d.get("sessionId"),
-        msg.get("model"), u.get("speed"),
-        u.get("input_tokens") or 0, u.get("output_tokens") or 0,
-        w5m, w1h, u.get("cache_read_input_tokens") or 0,
-    )
+    # A row that can't be stored and rolled up would fail the whole ingest on every render,
+    # since the transaction rolls back and the same line is read again.
+    if not (0 < ts < MAX_TIMESTAMP
+            and all(t is None or isinstance(t, str) for t in texts)
+            and all(type(n) is int and 0 <= n < MAX_TOKENS for n in tokens)):
+        return None
+    return (f"{msg.get('id')}:{d.get('requestId')}", int(ts), *texts, *tokens)
 
 
 # Re-reading a line refreshes its row (so parser improvements apply on rescan) but keeps
@@ -231,9 +239,12 @@ def _ingest(db, root, files):
             continue
         if size < start:  # truncated or replaced: rescan, dedupe keeps it safe
             start = 0
-        with open(path, "rb") as f:
-            f.seek(start)
-            data = f.read()
+        try:
+            with open(path, "rb") as f:
+                f.seek(start)
+                data = f.read()
+        except OSError:
+            continue
         end = data.rfind(b"\n") + 1  # leave a partially written last line for next time
         if end == 0:
             continue
