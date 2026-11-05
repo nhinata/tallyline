@@ -55,6 +55,56 @@ def test_config_set_and_validate(home):
         cli.main(["config", "range", "week"])
 
 
+@pytest.mark.parametrize("value, expected", [
+    ("on", True), ("ON", True), ("true", True), ("yes", True), ("1", True),
+    ("off", False), ("false", False), ("no", False), ("0", False),
+])
+def test_config_accepts_on_and_off_words(home, value, expected):
+    cli.main(["config", "cost", "off" if expected else "on"])
+    cli.main(["config", "cost", value])
+    assert config.load()["cost"] is expected
+
+
+def test_config_rejects_a_mistyped_value_and_keeps_the_setting(home):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["config", "cost", "onn"])
+    assert "on or off" in str(e.value)
+    assert config.load()["cost"] is True
+
+
+def test_config_rejects_reading_an_unknown_key(home):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["config", "nonsense"])
+    assert "nonsense" in str(e.value)
+
+
+@pytest.mark.parametrize("broken", ['{"prices": {},}\n', "[]\n"])
+def test_config_leaves_a_broken_file_alone(home, broken):
+    path = paths.config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text(broken)
+    for args in (["config", "cost", "off"], ["config", "cost"], ["config"]):
+        with pytest.raises(SystemExit) as e:
+            cli.main(args)
+        assert str(path) in str(e.value)
+    assert path.read_text() == broken
+
+
+def test_config_stops_when_the_file_cannot_be_read(home):
+    paths.config_path().mkdir(parents=True)  # open() fails on every platform
+    with pytest.raises(SystemExit) as e:
+        cli.main(["config", "cost", "off"])
+    assert str(paths.config_path()) in str(e.value)
+    assert config.load() == config.DEFAULTS
+
+
+def test_status_line_falls_back_to_defaults_on_a_broken_config(home):
+    path = paths.config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text("[]\n")
+    assert config.load() == config.DEFAULTS
+
+
 def test_render_survives_empty_stdin(home, monkeypatch, capsys):
     import io
     monkeypatch.setattr("sys.stdin", io.StringIO(""))

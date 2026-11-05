@@ -12,11 +12,22 @@ DEFAULTS = {
 }
 
 
-def load():
+def load(strict=False):
+    """Settings over the defaults.
+
+    A file that can't be read as a JSON object counts as empty, or raises OSError or
+    ValueError when strict, since saving after a lenient load would overwrite that file.
+    """
     try:
         with open(paths.config_path(), encoding="utf-8") as f:
             user = json.load(f)
+        if not isinstance(user, dict):
+            raise ValueError("not a JSON object")
+    except FileNotFoundError:
+        user = {}
     except (OSError, ValueError):
+        if strict:
+            raise
         user = {}
     return {**DEFAULTS, **user}
 

@@ -5,6 +5,10 @@ from pathlib import Path
 
 from . import __version__, config, paths, render, store
 
+ON_WORDS = ("1", "true", "on", "yes")
+OFF_WORDS = ("0", "false", "off", "no")
+
+
 def status_command():
     """Absolute command for settings.json.
 
@@ -105,20 +109,28 @@ def cmd_uninstall(_args):
 
 
 def cmd_config(args):
-    cfg = config.load()
+    try:
+        cfg = config.load(strict=True)
+    except (OSError, ValueError):
+        sys.exit(f"{paths.config_path()} can't be read as a JSON object; fix or delete it first.")
     if args.key is None:
         print(json.dumps(cfg, indent=2))
         return
     if args.value is None:
-        print(json.dumps(cfg.get(args.key.replace("-", "_"))))
+        key = args.key.replace("-", "_")
+        if key not in cfg:
+            sys.exit(f"unknown key: {args.key}")
+        print(json.dumps(cfg[key]))
         return
     if args.key == "range":
         if args.value not in config.RANGES:
             sys.exit(f"range must be one of: {', '.join(config.RANGES)}")
         cfg["range"] = args.value
     elif args.key in ("cost", "color", "update-check"):
-        key = args.key.replace("-", "_")
-        cfg[key] = args.value.lower() in ("1", "true", "on", "yes")
+        value = args.value.lower()
+        if value not in ON_WORDS + OFF_WORDS:
+            sys.exit(f"{args.key} must be on or off")
+        cfg[args.key.replace("-", "_")] = value in ON_WORDS
     else:
         sys.exit("settable keys: range, cost, color, update-check "
                  "(edit prices directly in the config file)")
