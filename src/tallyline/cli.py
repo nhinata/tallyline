@@ -118,7 +118,7 @@ def cmd_config(args):
         return
     if args.value is None:
         key = args.key.replace("-", "_")
-        if key not in cfg:
+        if key not in config.DEFAULTS:
             sys.exit(f"unknown key: {args.key}")
         print(json.dumps(cfg[key]))
         return

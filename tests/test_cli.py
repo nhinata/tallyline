@@ -78,6 +78,15 @@ def test_config_rejects_reading_an_unknown_key(home):
     assert "nonsense" in str(e.value)
 
 
+def test_config_rejects_reading_an_unsupported_key_from_the_file(home):
+    path = paths.config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text('{"update_chek": false}\n')
+    with pytest.raises(SystemExit) as e:
+        cli.main(["config", "update_chek"])
+    assert "update_chek" in str(e.value)
+
+
 @pytest.mark.parametrize("broken", ['{"prices": {},}\n', "[]\n"])
 def test_config_leaves_a_broken_file_alone(home, broken):
     path = paths.config_path()
