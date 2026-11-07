@@ -1,3 +1,5 @@
+import json
+
 from conftest import usage_line
 
 from tallyline import paths, store
@@ -20,6 +22,49 @@ def test_duplicate_streaming_lines_are_counted_once(home):
     db = store.connect()
     store.ingest(db)
     assert all_rows(db) == [("m1:r1", 0, 100, 0, 0, 0)]
+
+
+def test_malformed_usage_is_skipped(home):
+    log = paths.projects_dir() / "proj" / "s.jsonl"
+    good = json.loads(usage_line("good", "r", inp=1))
+
+    def bad(usage=None, **top):
+        msg = {**good["message"], "id": "bad"}
+        if usage is not None:
+            msg["usage"] = usage
+        return json.dumps({**good, "message": msg, **top}) + "\n"
+
+    lines = [bad(usage) for usage in (
+        "text", [], {"cache_creation": "text"}, {"input_tokens": "1"}, {"input_tokens": [1]},
+        {"input_tokens": 1.5}, {"input_tokens": -1}, {"input_tokens": 10 ** 30},
+        {"cache_creation_input_tokens": "1"}, {"speed": {"a": 1}},
+    )]
+    lines.append(bad(usage={}, message={"id": "bad", "usage": None}))
+    lines.append(bad(usage={}, message={"id": "bad", "model": {"a": 1}, "usage": {}}))
+    lines.append(bad(sessionId={"a": 1}))
+    lines += [bad(timestamp=t) for t in ("0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z")]
+    write(log, "".join(lines) + usage_line("good", "r", inp=1))
+    db = store.connect()
+    store.ingest(db)
+    assert [r[0] for r in all_rows(db)] == ["good:r"]
+    assert db.execute("SELECT SUM(input) FROM daily").fetchone()[0] == 1
+
+
+def test_values_at_the_token_limit_can_still_be_summed(home):
+    log = paths.projects_dir() / "proj" / "s.jsonl"
+    write(log, "".join(usage_line(f"m{i}", "r", inp=store.MAX_TOKENS - 1) for i in range(3)))
+    db = store.connect()
+    store.ingest(db)
+    assert store.totals_since(db, "2000-01-01")[0][2]["input"] == 3 * (store.MAX_TOKENS - 1)
+
+
+def test_unreadable_transcript_does_not_stop_the_others(home):
+    (paths.projects_dir() / "proj" / "a.jsonl").mkdir()  # open() fails on every platform
+    (paths.projects_dir() / "proj" / "a.jsonl" / "child").write_text("keeps its size above 0")
+    write(paths.projects_dir() / "proj" / "b.jsonl", usage_line("m1", "r1", inp=1))
+    db = store.connect()
+    store.ingest(db)
+    assert [r[0] for r in all_rows(db)] == ["m1:r1"]
 
 
 def test_only_appended_bytes_are_parsed_and_partial_lines_wait(home):
