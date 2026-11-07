@@ -13,9 +13,8 @@ import os
 import subprocess
 import time
 import unicodedata
-from datetime import datetime
 
-from . import paths, pricing
+from . import paths, pricing, transcript
 from .render import fmt_context, fmt_usd
 
 TAIL_BYTES = 4 << 20  # the latest usage and timestamps live at the end of a transcript
@@ -77,13 +76,6 @@ def _tmux_panes():
     return panes
 
 
-def _ts(value):
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except (AttributeError, ValueError):
-        return None
-
-
 def _empty_info():
     return {"title": None, "last": None, "context": 0, "model": None, "speed": "standard",
             "ttl": None}
@@ -97,10 +89,8 @@ def read_transcript(path):
         with open(path, "rb") as f:
             for line in f:  # titles can be rewritten anywhere in the file
                 if b'"ai-title"' in line:
-                    try:
-                        info["title"] = json.loads(line).get("aiTitle") or info["title"]
-                    except ValueError:
-                        pass
+                    d = transcript.load_line(line)
+                    info["title"] = transcript.text(d, "aiTitle") or info["title"]
             window = TAIL_BYTES
             while True:  # widen the tail until it holds a response with usage
                 f.seek(max(0, size - window))
@@ -120,23 +110,18 @@ def _read_tail(lines, info):
     for line in lines:
         if b'"timestamp"' not in line:
             continue
-        try:
-            o = json.loads(line)
-        except ValueError:
+        o = transcript.load_line(line)
+        if o is None or o.get("type") not in ("user", "assistant") or o.get("isSidechain"):
             continue
-        if o.get("type") not in ("user", "assistant") or o.get("isSidechain"):
+        ts = transcript.parse_timestamp(o.get("timestamp"))
+        info["last"] = max(info["last"] or 0, ts or 0) or info["last"]
+        u = transcript.parse_usage(o) if o["type"] == "assistant" else None
+        if u is None:
             continue
-        info["last"] = max(info["last"] or 0, _ts(o.get("timestamp")) or 0) or info["last"]
-        msg = o.get("message") or {}
-        u = msg.get("usage")
-        if o["type"] != "assistant" or not u:
+        if not u.context:  # synthetic messages carry no usage
             continue
-        ctx = sum(u.get(k) or 0 for k in
-                  ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
-        if not ctx:  # synthetic messages carry no usage
-            continue
-        info.update(context=ctx, model=msg.get("model"), speed=u.get("speed") or "standard")
-        cc = u.get("cache_creation") or {}
+        info.update(context=u.context, model=u.model, speed=u.speed or "standard")
+        cc = o["message"]["usage"].get("cache_creation") or {}
         if cc.get("ephemeral_1h_input_tokens"):
             info["ttl"] = "1h"
         elif cc.get("ephemeral_5m_input_tokens"):

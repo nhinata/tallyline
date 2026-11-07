@@ -2,7 +2,7 @@ import json
 
 from conftest import usage_line
 
-from tallyline import paths, store
+from tallyline import paths, store, transcript
 
 
 def write(path, text, mode="a"):
@@ -52,10 +52,10 @@ def test_malformed_usage_is_skipped(home):
 
 def test_values_at_the_token_limit_can_still_be_summed(home):
     log = paths.projects_dir() / "proj" / "s.jsonl"
-    write(log, "".join(usage_line(f"m{i}", "r", inp=store.MAX_TOKENS - 1) for i in range(3)))
+    write(log, "".join(usage_line(f"m{i}", "r", inp=transcript.MAX_TOKENS - 1) for i in range(3)))
     db = store.connect()
     store.ingest(db)
-    assert store.totals_since(db, "2000-01-01")[0][2]["input"] == 3 * (store.MAX_TOKENS - 1)
+    assert store.totals_since(db, "2000-01-01")[0][2]["input"] == 3 * (transcript.MAX_TOKENS - 1)
 
 
 def test_unreadable_transcript_does_not_stop_the_others(home):
