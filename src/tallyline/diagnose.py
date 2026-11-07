@@ -21,7 +21,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from . import paths, pricing
+from . import paths, pricing, transcript
 from .render import fmt_context, fmt_tokens, fmt_usd
 
 LONG_CONTEXT = 200_000
@@ -70,44 +70,38 @@ class Thread:
 
 
 def _content_chars(content):
-    if isinstance(content, str):
-        return len(content)
     n = 0
-    for c in content if isinstance(content, list) else ():
-        if not isinstance(c, dict):
-            continue
-        if c.get("type") == "image":
-            n += IMAGE_CHARS
-        elif c.get("type") == "tool_result":
-            n += _content_chars(c.get("content"))
-        else:
-            n += len(c.get("text") or "")
+    pending = [content]  # a loop rather than recursion, since a line can nest arbitrarily deep
+    while pending:
+        content = pending.pop()
+        if isinstance(content, str):
+            n += len(content)
+        for c in content if isinstance(content, list) else ():
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "image":
+                n += IMAGE_CHARS
+            elif c.get("type") == "tool_result":
+                pending.append(c.get("content"))
+            elif isinstance(c.get("text"), str):
+                n += len(c["text"])
     return n
 
 
 def tool_label(name, inp):
     """(label for one call, tool group) such as ('Read notes.md', 'Read')."""
     if name == "Read":
-        return f"Read {Path(inp.get('file_path') or '?').name}", "Read"
+        return f"Read {Path(transcript.text(inp, 'file_path') or '?').name}", "Read"
     if name == "Bash":
-        words = (inp.get("command") or "").split()
+        words = (transcript.text(inp, "command") or "").split()
         return f"Bash {words[0] if words else '?'}", "Bash"
     if name.startswith("mcp__"):
         parts = name.split("__")
         return parts[-1], parts[1] if len(parts) > 2 else name
     if name == "WebFetch":
-        url = inp.get("url") or ""
+        url = transcript.text(inp, "url") or ""
         return f"WebFetch {url.split('/')[2] if url.count('/') >= 2 else url}", name
     return name, name
-
-
-def _tokens(u):
-    created = u.get("cache_creation_input_tokens") or 0
-    split = u.get("cache_creation") or {}
-    w1h = split.get("ephemeral_1h_input_tokens") or 0
-    return {"input": u.get("input_tokens") or 0, "output": u.get("output_tokens") or 0,
-            "cache_write_5m": split.get("ephemeral_5m_input_tokens", created - w1h) or 0,
-            "cache_write_1h": w1h, "cache_read": u.get("cache_read_input_tokens") or 0}
 
 
 def parse_file(path, seen):
@@ -121,17 +115,14 @@ def parse_file(path, seen):
     title = project = None
     with open(path, "rb") as f:
         for line in f:
-            try:
-                d = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(d, dict):
+            d = transcript.load_line(line)
+            if d is None:
                 continue
             kind = d.get("type")
             if kind == "ai-title":
-                title = d.get("aiTitle") or title
+                title = transcript.text(d, "aiTitle") or title
                 continue
-            project = project or d.get("cwd")
+            project = project or transcript.text(d, "cwd")
             side = bool(d.get("isSidechain"))
             p = pending.setdefault(side, Call(0, None, None, None))
             if kind == "system" and d.get("subtype") == "compact_boundary":
@@ -144,7 +135,8 @@ def parse_file(path, seen):
             if kind == "user":
                 for c in content if isinstance(content, list) else ():
                     if isinstance(c, dict) and c.get("type") == "tool_result":
-                        label, tool, fpath = tool_uses.get(c.get("tool_use_id"), ("?", "?", None))
+                        label, tool, fpath = tool_uses.get(transcript.text(c, "tool_use_id"),
+                                                               ("?", "?", None))
                         p.results.append((label, tool, _content_chars(c.get("content")), fpath))
                     else:
                         p.other_chars += _content_chars([c])
@@ -156,27 +148,25 @@ def parse_file(path, seen):
             for c in content if isinstance(content, list) else ():
                 if isinstance(c, dict) and c.get("type") == "tool_use":
                     inp = c.get("input") if isinstance(c.get("input"), dict) else {}
-                    label, tool = tool_label(c.get("name") or "?", inp)
-                    tool_uses[c.get("id")] = (label, tool, inp.get("file_path")
-                                              if c.get("name") == "Read" else None)
-            u = msg.get("usage")
-            if not isinstance(u, dict):
+                    name = transcript.text(c, "name") or "?"
+                    label, tool = tool_label(name, inp)
+                    tool_id = transcript.text(c, "id")
+                    if tool_id:
+                        tool_uses[tool_id] = (label, tool, transcript.text(inp, "file_path")
+                                              if name == "Read" else None)
+            u = transcript.parse_usage(d)
+            if u is None:
                 continue
-            key = f"{msg.get('id')}:{d.get('requestId')}"
-            if key in calls:  # a later line of the same streamed response
-                calls[key].tokens = _tokens(u)
+            if u.key in calls:  # a later line of the same streamed response
+                calls[u.key].tokens = u.tokens
                 continue
-            if key in seen:
+            if u.key in seen:
                 continue
-            try:
-                ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
-            except (KeyError, ValueError, AttributeError):
-                continue
-            seen.add(key)
+            seen.add(u.key)
             call = pending.pop(side)
-            call.ts, call.model, call.speed, call.tokens = ts, msg.get("model"), u.get("speed"), _tokens(u)
-            calls[key] = call
-            threads.setdefault(side, Thread(d.get("sessionId") or Path(path).stem)).calls.append(call)
+            call.ts, call.model, call.speed, call.tokens = u.ts, u.model, u.speed, u.tokens
+            calls[u.key] = call
+            threads.setdefault(side, Thread(u.session or Path(path).stem)).calls.append(call)
     return list(threads.values()), title, project
 
 

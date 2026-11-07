@@ -6,13 +6,11 @@ keyed by message id + request id, which removes the duplicate lines written whil
 response streams. Costs are not stored: they are computed at query time so a price
 table update applies retroactively.
 """
-import json
 import os
 import sqlite3
 import time
-from datetime import datetime
 
-from . import paths
+from . import paths, transcript
 
 TOKEN_COLUMNS = ("input", "output", "cache_write_5m", "cache_write_1h", "cache_read")
 SUMS = ", ".join(f"SUM({c})" for c in TOKEN_COLUMNS)
@@ -122,35 +120,17 @@ class _write_lock:
         self.db.isolation_level = self.level
 
 
-MAX_TIMESTAMP = 4_102_444_800  # 2100-01-01 UTC, within every platform's local time range
-MAX_TOKENS = 1 << 40  # per request, so that summing rows can't overflow SQLite's integers
-
-
 def parse_line(line):
     """One transcript line -> usage row tuple, or None if it carries no valid usage."""
     if b'"usage"' not in line:
         return None
-    try:
-        d = json.loads(line)
-        msg = d["message"]
-        u = msg["usage"]
-        ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
-        created = u.get("cache_creation_input_tokens") or 0
-        split = u.get("cache_creation") or {}
-        w1h = split.get("ephemeral_1h_input_tokens") or 0
-        w5m = split.get("ephemeral_5m_input_tokens", created - w1h) or 0
-        texts = (d.get("sessionId"), msg.get("model"), u.get("speed"))
-        tokens = (u.get("input_tokens") or 0, u.get("output_tokens") or 0,
-                  w5m, w1h, u.get("cache_read_input_tokens") or 0)
-    except (ValueError, KeyError, TypeError, AttributeError):
+    d = transcript.load_line(line)
+    u = transcript.parse_usage(d) if d else None
+    if u is None:
         return None
     # A row that can't be stored and rolled up would fail the whole ingest on every render,
-    # since the transaction rolls back and the same line is read again.
-    if not (0 < ts < MAX_TIMESTAMP
-            and all(t is None or isinstance(t, str) for t in texts)
-            and all(type(n) is int and 0 <= n < MAX_TOKENS for n in tokens)):
-        return None
-    return (f"{msg.get('id')}:{d.get('requestId')}", int(ts), *texts, *tokens)
+    # since the transaction rolls back and the same line is read again; parse_usage rejects it.
+    return (u.key, int(u.ts), u.session, u.model, u.speed, *(u.tokens[c] for c in TOKEN_COLUMNS))
 
 
 # Re-reading a line refreshes its row (so parser improvements apply on rescan) but keeps
