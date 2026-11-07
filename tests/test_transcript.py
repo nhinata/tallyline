@@ -92,7 +92,8 @@ def test_commands_survive_a_wrong_value_in_any_field(home, monkeypatch, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.parametrize("line", [b"[" * 200_000, b"[1]", b"1", b"null", b"not json", b"\xff"])
+@pytest.mark.parametrize("line", [pytest.param(b"[" * 200_000, id="deeply-nested"),
+                                  b"[1]", b"1", b"null", b"not json", b"\xff"])
 def test_load_line_rejects_anything_but_an_object(line):
     assert transcript.load_line(line) is None
 
