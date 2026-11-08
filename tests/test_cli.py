@@ -185,3 +185,9 @@ def test_rebuild_fails_without_changes_while_the_cache_is_locked(home, monkeypat
 def test_rebuild_succeeds_when_every_transcript_is_read(home, capsys):
     cli.main(["rebuild"])
     assert "Re-scanned" in capsys.readouterr().out
+
+
+def test_paths_are_shortened_only_inside_home(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "me")
+    assert cli._display_path(tmp_path / "me" / "a.db") == str(cli.Path("~") / "a.db")
+    assert cli._display_path(tmp_path / "me2" / "a.db") == str(tmp_path / "me2" / "a.db")

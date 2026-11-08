@@ -156,13 +156,14 @@ def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
     return _locked(db, wait_ms, lambda: _ingest(db, root, files)) is not None
 
 
-def rebuild(db, root=None, wait_ms=REBUILD_WAIT_MS):
+def rebuild(db, root=None, wait_ms=None):
     """Parse every transcript again from the start; existing rows are kept.
 
     Returns (path, reason) for each transcript that couldn't be read, or None when another
-    process kept the write lock for longer than wait_ms.
+    process kept the write lock for longer than wait_ms (REBUILD_WAIT_MS by default).
     """
     root, files = _transcripts(root)
+    wait_ms = REBUILD_WAIT_MS if wait_ms is None else wait_ms
 
     def run():
         db.execute("DELETE FROM files")
@@ -244,6 +245,8 @@ def _ingest(db, root, files):
             with open(path, "rb") as f:
                 f.seek(start)
                 data = f.read()
+        except FileNotFoundError:
+            continue
         except OSError as e:
             unreadable.append((path, e.strerror or str(e)))
             continue

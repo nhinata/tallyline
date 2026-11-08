@@ -67,8 +67,11 @@ def _log_error():
 
 
 def _display_path(path):
-    home = str(Path.home())
-    return str(path).replace(home, "~", 1) if str(path).startswith(home) else str(path)
+    home = Path.home()
+    try:
+        return str(Path("~") / Path(path).relative_to(home))
+    except ValueError:  # outside home, including /Users/name2 when home is /Users/name
+        return str(path)
 
 
 def _read_settings(path):
@@ -145,7 +148,7 @@ def cmd_config(args):
 
 def cmd_rebuild(_args):
     db = store.connect()
-    unreadable = store.rebuild(db, wait_ms=store.REBUILD_WAIT_MS)
+    unreadable = store.rebuild(db)
     if unreadable is None:
         sys.exit(f"Another tallyline process kept the cache locked for "
                  f"{store.REBUILD_WAIT_MS // 1000} seconds; nothing was changed. Try again.")

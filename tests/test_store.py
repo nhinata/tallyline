@@ -77,6 +77,19 @@ def test_rebuild_reports_unreadable_transcripts(home):
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
 
 
+def test_transcript_deleted_before_it_is_opened_is_not_reported(home, monkeypatch):
+    log = paths.projects_dir() / "proj" / "s.jsonl"
+    write(log, usage_line("m1", "r1", inp=1))
+    real_open = open
+
+    def deleted_first(path, *args, **kwargs):
+        if str(path) == str(log.absolute()):
+            raise FileNotFoundError(path)
+        return real_open(path, *args, **kwargs)
+    monkeypatch.setattr("builtins.open", deleted_first)
+    assert store.rebuild(store.connect()) == []
+
+
 def test_rebuild_changes_nothing_while_another_process_holds_the_lock(home):
     write(paths.projects_dir() / "proj" / "s.jsonl", usage_line("m1", "r1", inp=1))
     db = store.connect()
@@ -84,8 +97,10 @@ def test_rebuild_changes_nothing_while_another_process_holds_the_lock(home):
     other = store.connect()
     other.isolation_level = None
     other.execute("BEGIN IMMEDIATE")
-    assert store.rebuild(db, wait_ms=10) is None
-    other.execute("ROLLBACK")
+    try:
+        assert store.rebuild(db, wait_ms=10) is None
+    finally:
+        other.execute("ROLLBACK")
     assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
 
 
