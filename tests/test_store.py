@@ -1,6 +1,6 @@
 import json
 
-from conftest import usage_line
+from conftest import fail_open, usage_line
 
 from tallyline import paths, store, transcript
 
@@ -67,11 +67,11 @@ def test_unreadable_transcript_does_not_stop_the_others(home):
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
 
 
-def test_rebuild_reports_unreadable_transcripts(home):
+def test_rebuild_reports_unreadable_transcripts(home, monkeypatch):
     unreadable = paths.projects_dir() / "proj" / "a.jsonl"
-    unreadable.mkdir()
-    (unreadable / "child").write_text("keeps its size above 0")
+    write(unreadable, usage_line("m0", "r0", inp=1))
     write(paths.projects_dir() / "proj" / "b.jsonl", usage_line("m1", "r1", inp=1))
+    fail_open(monkeypatch, unreadable, PermissionError)
     db = store.connect()
     assert [p for p, _ in store.rebuild(db)] == [unreadable]
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
@@ -80,13 +80,7 @@ def test_rebuild_reports_unreadable_transcripts(home):
 def test_transcript_deleted_before_it_is_opened_is_not_reported(home, monkeypatch):
     log = paths.projects_dir() / "proj" / "s.jsonl"
     write(log, usage_line("m1", "r1", inp=1))
-    real_open = open
-
-    def deleted_first(path, *args, **kwargs):
-        if str(path) == str(log.absolute()):
-            raise FileNotFoundError(path)
-        return real_open(path, *args, **kwargs)
-    monkeypatch.setattr("builtins.open", deleted_first)
+    fail_open(monkeypatch, log, FileNotFoundError)
     assert store.rebuild(store.connect()) == []
 
 

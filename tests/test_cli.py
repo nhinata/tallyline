@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from conftest import fail_open
 
 from tallyline import cli, config, paths, store
 
@@ -158,9 +159,10 @@ def test_render_error_shows_a_short_line_and_logs_the_traceback(home, monkeypatc
     assert "KeyError: 'unexpected field'" in log and "tallyline" in log
 
 
-def test_rebuild_lists_unreadable_transcripts_and_fails(home, capsys):
-    (paths.projects_dir() / "proj" / "a.jsonl").mkdir()
-    (paths.projects_dir() / "proj" / "a.jsonl" / "child").write_text("x")
+def test_rebuild_lists_unreadable_transcripts_and_fails(home, monkeypatch, capsys):
+    log = paths.projects_dir() / "proj" / "a.jsonl"
+    log.write_text("{}\n")
+    fail_open(monkeypatch, log, PermissionError)
     with pytest.raises(SystemExit) as e:
         cli.main(["rebuild"])
     assert e.value.code == 1
