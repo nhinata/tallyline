@@ -173,9 +173,10 @@ Fast mode requests are multiplied by each model's `fast_multiplier`.
 - The cost is an estimate at list prices, not a bill. On Pro/Max plans you pay your plan price.
 - tallyline only sees what Claude Code writes to transcripts. Some background requests are never recorded there, so totals can come out lower than `/cost`. In one auto mode session, tallyline counted about 15% less than `/cost` (likely the permission checks auto mode runs). Tokens and cost come from the same transcripts, so the two always match each other.
 - Claude Code deletes old transcripts after `cleanupPeriodDays` (30 by default). tallyline keeps whatever it has already ingested, but it can't count transcripts that were deleted before you installed it.
+- Claude Haiku 5.5 requests with prompts over 100,000 tokens are billed at higher prices, but tallyline uses the standard prices, so their cost comes out lower.
 - Transcript files are an internal Claude Code format and may change.
 - If you switch between several Claude accounts on one machine, their rate limit records can mix.
-- Tested on macOS and Linux. Windows is untested; on Windows, `tallyline sessions` cannot tell whether a listed session is still running, so a crashed session may stay in the list.
+- Tested on macOS and Linux. On Windows only the automated tests are run, and `tallyline sessions` cannot tell whether a listed session is still running, so a crashed session may stay in the list.
 - Not affiliated with or endorsed by Anthropic.
 
 ## Updating
