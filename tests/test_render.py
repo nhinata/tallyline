@@ -232,3 +232,10 @@ def test_resumed_session_keeps_limits_until_its_first_new_response(home):
     render.rate_limits(limits_info("s1", seven_day=(41, LATER)), db,
                        now=earlier.timestamp() + 2)   # seen right after that response
     assert render.rate_limits({"session_id": "s1"}, db) == "7d 41%"
+
+
+def test_token_and_cost_units_follow_the_rounded_value():
+    assert [render.fmt_tokens(n) for n in (999, 1000, 999_949, 999_960, 999_960_000)] == \
+        ["999", "1.0k", "999.9k", "1.0M", "1.0B"]
+    assert [render.fmt_usd(x) for x in (999.994, 999.996, 1234.5)] == \
+        ["$999.99", "$1,000", "$1,234"]

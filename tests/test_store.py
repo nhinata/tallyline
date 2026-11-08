@@ -1,6 +1,6 @@
 import json
 
-from conftest import usage_line
+from conftest import fail_open, usage_line
 
 from tallyline import paths, store, transcript
 
@@ -65,6 +65,37 @@ def test_unreadable_transcript_does_not_stop_the_others(home):
     db = store.connect()
     store.ingest(db)
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
+
+
+def test_rebuild_reports_unreadable_transcripts(home, monkeypatch):
+    unreadable = paths.projects_dir() / "proj" / "a.jsonl"
+    write(unreadable, usage_line("m0", "r0", inp=1))
+    write(paths.projects_dir() / "proj" / "b.jsonl", usage_line("m1", "r1", inp=1))
+    fail_open(monkeypatch, unreadable, PermissionError)
+    db = store.connect()
+    assert [p for p, _ in store.rebuild(db)] == [unreadable]
+    assert [r[0] for r in all_rows(db)] == ["m1:r1"]
+
+
+def test_transcript_deleted_before_it_is_opened_is_not_reported(home, monkeypatch):
+    log = paths.projects_dir() / "proj" / "s.jsonl"
+    write(log, usage_line("m1", "r1", inp=1))
+    fail_open(monkeypatch, log, FileNotFoundError)
+    assert store.rebuild(store.connect()) == []
+
+
+def test_rebuild_changes_nothing_while_another_process_holds_the_lock(home):
+    write(paths.projects_dir() / "proj" / "s.jsonl", usage_line("m1", "r1", inp=1))
+    db = store.connect()
+    store.ingest(db)
+    other = store.connect()
+    other.isolation_level = None
+    other.execute("BEGIN IMMEDIATE")
+    try:
+        assert store.rebuild(db, wait_ms=10) is None
+    finally:
+        other.execute("ROLLBACK")
+    assert db.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 1
 
 
 def test_only_appended_bytes_are_parsed_and_partial_lines_wait(home):
@@ -142,8 +173,7 @@ def test_history_survives_transcript_deletion_and_rebuild(home):
     db = store.connect()
     store.ingest(db)
     log.unlink()  # Claude Code's cleanupPeriodDays removed the transcript
-    store.rescan(db)
-    store.ingest(db)
+    assert store.rebuild(db) == []
     assert [r[0] for r in all_rows(db)] == ["m1:r1"]
 
 
@@ -190,8 +220,7 @@ def test_daily_rollup_matches_raw_rows_after_upserts(home):
     write(log, usage_line("a", "r", inp=1) + usage_line("b", "r", inp=2) + usage_line("a", "r", inp=1))
     db = store.connect()
     store.ingest(db)
-    store.rescan(db)
-    store.ingest(db)
+    store.rebuild(db)
     assert db.execute("SELECT SUM(input) FROM daily").fetchone()[0] == 3
 
 

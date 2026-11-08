@@ -27,3 +27,14 @@ def usage_line(msg_id, req_id, ts="2026-10-03T01:30:44.333Z", model="claude-sonn
             "speed": speed,
         }},
     }) + "\n"
+
+
+def fail_open(monkeypatch, path, error):
+    """Make open() raise error for one file; chmod doesn't block reads on Windows."""
+    real_open = open
+
+    def fake_open(file, *args, **kwargs):
+        if str(file) == str(path.absolute()):
+            raise error(file)
+        return real_open(file, *args, **kwargs)
+    monkeypatch.setattr("builtins.open", fake_open)

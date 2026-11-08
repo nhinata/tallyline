@@ -63,8 +63,15 @@ def _log_error():
             f.write(traceback.format_exc())
     except OSError:
         pass
-    home = str(Path.home())
-    return str(path).replace(home, "~", 1) if str(path).startswith(home) else str(path)
+    return _display_path(path)
+
+
+def _display_path(path):
+    home = Path.home()
+    try:
+        return str(Path("~") / Path(path).relative_to(home))
+    except ValueError:  # outside home, including /Users/name2 when home is /Users/name
+        return str(path)
 
 
 def _read_settings(path):
@@ -141,9 +148,18 @@ def cmd_config(args):
 
 def cmd_rebuild(_args):
     db = store.connect()
-    store.rescan(db)
-    store.ingest(db, wait_ms=30_000)
-    print(f"Re-scanned all transcripts into {paths.db_path()} (existing history kept)")
+    unreadable = store.rebuild(db)
+    if unreadable is None:
+        sys.exit(f"Another tallyline process kept the cache locked for "
+                 f"{store.REBUILD_WAIT_MS // 1000} seconds; nothing was changed. Try again.")
+    print(f"Re-scanned all transcripts into {_display_path(paths.db_path())} "
+          "(existing history kept)")
+    if unreadable:
+        print(f"Could not read {len(unreadable)} transcript(s); their usage is not counted:",
+              file=sys.stderr)
+        for path, reason in unreadable:
+            print(f"  {_display_path(path)}: {reason}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_diagnose(args):

@@ -145,7 +145,7 @@ tallyline config update-check off  # 1日1回の更新確認を止める（環�
 tallyline config               # 現在の設定を表示
 ```
 
-設定は `~/.config/tallyline/config.json` に、集計の記録は `~/.cache/tallyline/usage.db` に保存されます。`tallyline rebuild` を実行すると、全ログを読み直します。Claude Code がすでに削除したログの分の記録は、消えずに残ります。
+設定は `~/.config/tallyline/config.json` に、集計の記録は `~/.cache/tallyline/usage.db` に保存されます。`tallyline rebuild` を実行すると、全ログを読み直します。Claude Code がすでに削除したログの分の記録は、消えずに残ります。読めないログがあると、`rebuild` はそのファイルを一覧にして、終了コード 1 で終わります。
 
 ### 単価
 
