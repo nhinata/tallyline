@@ -147,7 +147,7 @@ tallyline config update-check off  # no daily version check (or set NO_UPDATE_NO
 tallyline config               # show current settings
 ```
 
-Settings live in `~/.config/tallyline/config.json`. The cache lives in `~/.cache/tallyline/usage.db`. `tallyline rebuild` re-scans every transcript. It keeps the history of transcripts that Claude Code has already deleted.
+Settings live in `~/.config/tallyline/config.json`. The cache lives in `~/.cache/tallyline/usage.db`. `tallyline rebuild` re-scans every transcript. It keeps the history of transcripts that Claude Code has already deleted. If a transcript can't be read, `rebuild` lists it and exits with status 1.
 
 ### Prices
 

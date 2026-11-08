@@ -18,13 +18,14 @@ GAP = "  "  # separates items within a scope; " │ " separates scopes
 
 def fmt_tokens(n):
     for unit, size in (("B", 1e9), ("M", 1e6), ("k", 1e3)):
-        if n >= size:
+        # also when the smaller unit would round up to 1000.0, such as 999,960 tokens
+        if n >= size or round(n / (size / 1000), 1) >= 1000:
             return f"{n / size:.1f}{unit}"
     return str(int(n))
 
 
 def fmt_usd(x):
-    return f"${x:,.0f}" if x >= 1000 else f"${x:,.2f}"
+    return f"${x:,.0f}" if round(x, 2) >= 1000 else f"${x:,.2f}"
 
 
 def range_start(name, now=None):

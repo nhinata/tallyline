@@ -58,6 +58,7 @@ COLUMNS = ("key", "ts", "session", "model", "speed") + TOKEN_COLUMNS
 
 # Every session's status line renders in its own process, often at the same moment.
 INGEST_WAIT_MS = 50  # how long to wait for another process that is already ingesting
+REBUILD_WAIT_MS = 30_000
 
 
 def connect(path=None):
@@ -143,31 +144,47 @@ UPSERT = (
 )
 
 
-def rescan(db):
-    """Forget read offsets so every transcript is parsed again; existing rows are kept."""
-    with db:
-        db.execute("DELETE FROM files")
-
-
 def ingest(db, root=None, wait_ms=INGEST_WAIT_MS):
     """Parse bytes appended to transcripts since the last run.
 
     Returns False without waiting when another process is already ingesting; the caller
     then renders from what is stored, which that process is about to bring up to date.
     """
-    # absolute, so a relative CLAUDE_CONFIG_DIR used from two directories can't collide
-    root = (root or paths.projects_dir()).absolute()
-    files = list(root.glob("**/*.jsonl"))
+    root, files = _transcripts(root)
     if not _changed(db, root, files):
         return True
+    return _locked(db, wait_ms, lambda: _ingest(db, root, files)) is not None
+
+
+def rebuild(db, root=None, wait_ms=REBUILD_WAIT_MS):
+    """Parse every transcript again from the start; existing rows are kept.
+
+    Returns (path, reason) for each transcript that couldn't be read, or None when another
+    process kept the write lock for longer than wait_ms.
+    """
+    root, files = _transcripts(root)
+
+    def run():
+        db.execute("DELETE FROM files")
+        return _ingest(db, root, files)
+    return _locked(db, wait_ms, run)
+
+
+def _transcripts(root):
+    # absolute, so a relative CLAUDE_CONFIG_DIR used from two directories can't collide
+    root = (root or paths.projects_dir()).absolute()
+    return root, list(root.glob("**/*.jsonl"))
+
+
+def _locked(db, wait_ms, work):
+    """work() inside the write lock, or None when another process holds it past wait_ms."""
     try:
         with _write_lock(db, wait_ms=wait_ms):
-            _ingest(db, root, files)
+            return work()
     except sqlite3.OperationalError as e:
         if "locked" not in str(e) and "busy" not in str(e):
             raise
-        return False
-    return True
+        return None
 
 
 def _changed(db, root, files):
@@ -205,14 +222,18 @@ def _missing(path):
 
 
 def _ingest(db, root, files):
+    """Store rows appended since the recorded offsets; returns (path, reason) of unreadable files."""
     # read offsets again inside the lock: another process may have just ingested
     offsets = dict(db.execute("SELECT path, offset FROM files"))
-    rows, new_offsets = [], []
+    rows, new_offsets, unreadable = [], [], []
     for path in files:
         key = str(path)
         try:
             size = path.stat().st_size
-        except OSError:
+        except FileNotFoundError:  # deleted since the listing
+            continue
+        except OSError as e:
+            unreadable.append((path, e.strerror or str(e)))
             continue
         start = offsets.get(key, 0)
         if size == start:
@@ -223,7 +244,8 @@ def _ingest(db, root, files):
             with open(path, "rb") as f:
                 f.seek(start)
                 data = f.read()
-        except OSError:
+        except OSError as e:
+            unreadable.append((path, e.strerror or str(e)))
             continue
         end = data.rfind(b"\n") + 1  # leave a partially written last line for next time
         if end == 0:
@@ -239,6 +261,7 @@ def _ingest(db, root, files):
         db.executemany(UPSERT, rows)
         db.executemany("INSERT OR REPLACE INTO files VALUES (?,?)", new_offsets)
         refresh_daily(db, {r[1] for r in rows})
+    return unreadable
 
 
 def refresh_daily(db, timestamps):

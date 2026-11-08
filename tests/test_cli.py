@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from tallyline import cli, config, paths
+from tallyline import cli, config, paths, store
 
 
 def settings():
@@ -156,3 +156,32 @@ def test_render_error_shows_a_short_line_and_logs_the_traceback(home, monkeypatc
     assert out.startswith("tallyline: error (see ") and out.endswith("error.log)")
     log = paths.db_path().with_name("error.log").read_text()
     assert "KeyError: 'unexpected field'" in log and "tallyline" in log
+
+
+def test_rebuild_lists_unreadable_transcripts_and_fails(home, capsys):
+    (paths.projects_dir() / "proj" / "a.jsonl").mkdir()
+    (paths.projects_dir() / "proj" / "a.jsonl" / "child").write_text("x")
+    with pytest.raises(SystemExit) as e:
+        cli.main(["rebuild"])
+    assert e.value.code == 1
+    err = capsys.readouterr().err
+    assert "Could not read 1 transcript(s)" in err and "a.jsonl" in err
+
+
+def test_rebuild_fails_without_changes_while_the_cache_is_locked(home, monkeypatch, capsys):
+    monkeypatch.setattr(store, "REBUILD_WAIT_MS", 10)
+    other = store.connect()
+    other.isolation_level = None
+    other.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(SystemExit) as e:
+            cli.main(["rebuild"])
+    finally:
+        other.execute("ROLLBACK")
+    assert "nothing was changed" in str(e.value.code)
+    assert "Re-scanned" not in capsys.readouterr().out
+
+
+def test_rebuild_succeeds_when_every_transcript_is_read(home, capsys):
+    cli.main(["rebuild"])
+    assert "Re-scanned" in capsys.readouterr().out
