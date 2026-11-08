@@ -162,12 +162,12 @@ def test_render_error_shows_a_short_line_and_logs_the_traceback(home, monkeypatc
 def test_rebuild_lists_unreadable_transcripts_and_fails(home, monkeypatch, capsys):
     log = paths.projects_dir() / "proj" / "a.jsonl"
     log.write_text("{}\n")
-    fail_open(monkeypatch, log, PermissionError)
+    fail_open(monkeypatch, log, lambda f: PermissionError(13, "Permission denied", f))
     with pytest.raises(SystemExit) as e:
         cli.main(["rebuild"])
     assert e.value.code == 1
     err = capsys.readouterr().err
-    assert "Could not read 1 transcript(s)" in err and "a.jsonl" in err
+    assert "Could not read 1 transcript(s)" in err and "a.jsonl: Permission denied" in err
 
 
 def test_rebuild_fails_without_changes_while_the_cache_is_locked(home, monkeypatch, capsys):
