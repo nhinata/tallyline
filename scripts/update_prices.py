@@ -1,7 +1,7 @@
 """Regenerate src/tallyline/prices.json from Anthropic's official pricing page.
 
-Run by the update-prices GitHub Actions workflow; exits non-zero if parsing fails
-so a broken page layout never ships an empty table.
+Run by the update-prices GitHub Actions workflow; exits non-zero if the page does not
+match the layout the parser expects, so prices read from a changed layout are not shipped.
 """
 import json
 import sys
