@@ -81,6 +81,9 @@ FAST_SECTION = "### Fast mode pricing\n\n| Model | Input | Output |\n| --- | ---
     ("| --- | --- | --- |", "| --- | --- |", "unexpected table separator"),
     ("| $10 USD / MTok | $50 USD / MTok |", "| $10 USD / MTok | $50 USD / MTok | x |",
      "unexpected number of cells"),
+    ("| Claude Opus 5 | $5 / MTok", "Claude Opus 5 | $5 / MTok", "without a leading pipe"),
+    ("| Claude Opus 5 / Claude Opus 4.1 |", "Claude Opus 5 / Claude Opus 4.1 |",
+     "without a leading pipe"),
     ("*footnote*", "```\n# example\n```", "code block"),
     ("*footnote*", "#### Older models", "sub-heading"),
     ("| $8 USD / MTok | $40 USD / MTok |", "| $8 USD per MTok | $40 USD per MTok |",
@@ -106,6 +109,7 @@ FAST_SECTION = "### Fast mode pricing\n\n| Model | Input | Output |\n| --- | ---
      "only a long-prompt tier"),
 ], ids=["fast-heading", "fast-heading-twice", "model-columns-swapped", "model-column-renamed",
         "table-without-header", "separator-cell", "separator-length", "row-length",
+        "model-row-without-pipe", "fast-row-without-pipe",
         "code-block", "sub-heading", "fast-price", "fast-price-prefix", "model-price", "model-price-range",
         "fast-columns-swapped", "fast-output-ratio", "fast-names-joined-with-and",
         "fast-unknown-model", "fast-duplicate-model", "zero-standard-price", "model-duplicate", "long-prompt-tier-only"])

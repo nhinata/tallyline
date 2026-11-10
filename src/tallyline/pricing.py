@@ -112,9 +112,10 @@ def _section_rows(lines, heading, columns):
     The section runs from its heading to the next heading of the same or a higher level.
     Sections and tables are found by the first characters of a line only; as in markdown, a
     heading may be indented by up to three spaces. A sub-heading or a code block inside the
-    section raises; other lines between tables are ignored.
+    section raises, and so does a line that contains "|" but does not start with it (a table
+    row missing its leading pipe). Other lines between tables are ignored.
     """
-    starts = [i for i, l in enumerate(lines) if l.strip().lower() == heading.lower()]
+    starts = [i for i, text in enumerate(lines) if text.strip().lower() == heading.lower()]
     if len(starts) != 1:
         raise ValueError(f"expected one heading, found {len(starts)}: {heading}")
     level = len(heading) - len(heading.lstrip("#"))
@@ -134,6 +135,8 @@ def _section_rows(lines, heading, columns):
             if len(m.group(1)) <= level:
                 break
             raise ValueError(f"sub-heading under {heading}: {line}")
+        if "|" in line:
+            raise ValueError(f"table row without a leading pipe under {heading}: {line}")
     if not tables:
         raise ValueError(f"no table under: {heading}")
     return [row for table in tables for row in _table_rows(table, columns, heading)]
