@@ -2,6 +2,8 @@
 
 The transcript format is undocumented and a line can hold anything, so values are checked
 here before they are used. A request that fails the checks is left out by all of them.
+The same checks apply to other JSON that tallyline reads but doesn't write: Claude Code's
+session files and the price overrides in config.json.
 """
 import json
 from collections import namedtuple
@@ -39,6 +41,18 @@ def text(d, key):
     return value if isinstance(value, str) and value and _encodable(value) else None
 
 
+def number(value, upper, integer=False):
+    """value if it is a number with 0 <= value < upper (an int when integer), else None.
+
+    The range check also rejects NaN, infinities and integers too large for a float. 0 is a
+    valid result, so compare the result with None.
+    """
+    kinds = int if integer else (int, float)
+    if isinstance(value, bool) or not isinstance(value, kinds) or not 0 <= value < upper:
+        return None
+    return value + 0  # -0.0 -> 0.0
+
+
 def parse_timestamp(value):
     """Seconds since the epoch for an ISO 8601 string, or None if invalid or out of range."""
     try:
@@ -68,7 +82,7 @@ def parse_usage(d):
     if (ts is None
             or not _encodable(key)
             or not all(t is None or (isinstance(t, str) and _encodable(t)) for t in texts)
-            or not all(type(n) is int and 0 <= n < MAX_TOKENS
+            or not all(number(n, MAX_TOKENS, integer=True) is not None
                        for n in (created, *tokens.values()))):
         return None
     return Usage(key, ts, *texts, tokens, tokens["input"] + created + tokens["cache_read"])

@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from conftest import fail_open
+from conftest import BAD_VALUES, fail_open, usage_line
 
 from tallyline import cli, config, paths, store
 
@@ -132,6 +132,15 @@ def test_init_falls_back_to_python_module_when_not_on_path(home, monkeypatch):
     assert settings()["statusLine"]["command"] == "'/opt/py dir/bin/python3' -m tallyline"
 
 
+@pytest.mark.parametrize("found", [r"C:\Users\A B\Scripts\tallyline.EXE",
+                                   r"C:\Python\Scripts\tallyline.exe", None])
+def test_the_command_init_writes_is_recognized_with_windows_paths(monkeypatch, found):
+    import sys
+    monkeypatch.setattr("shutil.which", lambda name: found)
+    monkeypatch.setattr(sys, "executable", r"C:\Program Files\Python\python.exe")
+    assert cli.is_ours(cli.status_command())
+
+
 def test_reinit_and_uninstall_recognize_any_tallyline_command(home):
     for command in ("tallyline", "/x/bin/tallyline", "'/a b/tallyline'", "python3 -m tallyline"):
         assert cli.is_ours(command), command
@@ -193,3 +202,38 @@ def test_paths_are_shortened_only_inside_home(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.Path, "home", lambda: tmp_path / "me")
     assert cli._display_path(tmp_path / "me" / "a.db") == str(cli.Path("~") / "a.db")
     assert cli._display_path(tmp_path / "me2" / "a.db") == str(tmp_path / "me2" / "a.db")
+
+
+def status_line(monkeypatch, capsys):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+    capsys.readouterr()
+    cli.main([])
+    return capsys.readouterr().out
+
+
+def test_deeply_nested_config_counts_as_empty_except_for_the_config_command(
+        home, monkeypatch, capsys):
+    # deep enough that json can't read it on any Python version
+    paths.config_path().parent.mkdir(parents=True)
+    paths.config_path().write_text('{"prices": ' + "[" * 10 ** 6)
+    assert config.load() == config.DEFAULTS
+    assert "tallyline: error" not in status_line(monkeypatch, capsys)
+    cli.main(["sessions"])
+    with pytest.raises(SystemExit):
+        cli.main(["config", "range", "today"])
+    assert paths.config_path().read_text().startswith('{"prices": [[')
+
+
+def test_wrong_prices_in_config_never_break_the_commands(home, monkeypatch, capsys):
+    (paths.projects_dir() / "proj" / "s1.jsonl").write_text(usage_line("m", "r", inp=1_000))
+    paths.config_path().parent.mkdir(parents=True)
+    for bad in BAD_VALUES:
+        for prices in (bad, {"claude-sonnet-5": bad}, {"claude-sonnet-5": {"input": bad}}):
+            paths.config_path().write_text(json.dumps({"prices": prices}))
+            line = status_line(monkeypatch, capsys)
+            assert "tallyline: error" not in line and "nan" not in line and "inf" not in line
+            for argv in (["sessions", "--json"], ["diagnose", "--json"]):
+                cli.main(argv)
+                out = capsys.readouterr().out
+                assert "NaN" not in out and "Infinity" not in out, (prices, argv)

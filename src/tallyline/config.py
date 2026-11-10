@@ -25,6 +25,10 @@ def load(strict=False):
             raise ValueError("not a JSON object")
     except FileNotFoundError:
         user = {}
+    except RecursionError:
+        if strict:
+            raise ValueError("nested too deeply") from None
+        user = {}
     except (OSError, ValueError):
         if strict:
             raise
