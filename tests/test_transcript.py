@@ -3,13 +3,11 @@ import json
 import os
 
 import pytest
-from conftest import usage_line
+from conftest import BAD_VALUES, usage_line
 
 from tallyline import cli, diagnose, paths, sessions, store, transcript
 
 NOW = 1_791_000_000  # 2026-10-03
-BAD_VALUES = (None, 1, -1, 1.5, "x", [], {"a": 1}, 10 ** 30, "9999-12-31T23:59:59Z",
-              "a\ud83d")
 
 
 def iso(ts):

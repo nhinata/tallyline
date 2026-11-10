@@ -20,6 +20,7 @@ from .render import fmt_context, fmt_usd
 TAIL_BYTES = 4 << 20  # the latest usage and timestamps live at the end of a transcript
 LIFETIME = {"1h": 3600, "5m": 300}
 WINDOWS = os.name == "nt"
+MAX_PID = 2 ** 31  # os.kill takes a C int
 
 
 def _alive(pid):
@@ -128,10 +129,13 @@ def _read_tail(lines, info):
             info["ttl"] = "5m"
 
 
-def find_transcript(session_id):
-    for path in paths.projects_dir().glob(f"*/{session_id}.jsonl"):
-        return path
-    return None
+def _transcripts():
+    """Transcript paths by file name, so a session id is matched exactly, never as a pattern
+    or case-insensitively."""
+    found = {}
+    for path in paths.projects_dir().glob("*/*.jsonl"):
+        found.setdefault(path.name, path)
+    return found
 
 
 def collect(prices, now=None, table=None, panes=None):
@@ -140,41 +144,48 @@ def collect(prices, now=None, table=None, panes=None):
     table = _process_table() if table is None else table
     panes = _tmux_panes() if panes is None else panes
     mine = _ancestors(table)
+    transcripts = _transcripts()
     sessions = []
     for f in sorted((paths.claude_dir() / "sessions").glob("*.json")):
         try:
-            d = json.loads(f.read_text(encoding="utf-8"))
-            pid = int(d["pid"])
-            sid = d["sessionId"]
-        except (OSError, ValueError, KeyError, TypeError):
+            d = transcript.load_line(f.read_bytes())
+        except OSError:
+            continue
+        pid = transcript.number(d.get("pid"), MAX_PID, integer=True) if d else None
+        sid = transcript.text(d, "sessionId")
+        if not pid or not sid:
             continue
         if not _alive(pid):
             continue  # left behind by a session that crashed
-        t = find_transcript(sid)
+        t = transcripts.get(f"{sid}.jsonl")
         info = read_transcript(t) if t else _empty_info()
-        if d.get("tmux"):
-            pane = panes.get(d["tmux"].split(":", 1)[-1])
-            where = {"kind": "tmux", "target": pane[0] if pane else d["tmux"].split(":")[0],
+        tmux, status = transcript.text(d, "tmux"), transcript.text(d, "status")
+        if tmux:
+            pane = panes.get(tmux.split(":", 1)[-1])
+            where = {"kind": "tmux", "target": pane[0] if pane else tmux.split(":")[0],
                      "name": pane[1] if pane else None}
-        elif d.get("kind") == "bg":
+        elif transcript.text(d, "kind") == "bg":
             where = {"kind": "background", "target": None, "name": None}
         else:
             where = {"kind": "tty", "target": table.get(pid, (0, "?"))[1], "name": None}
-        last = info["last"] or (int(d.get("updatedAt") or 0) / 1000) or None
+        updated = transcript.number(d.get("updatedAt"), transcript.MAX_TIMESTAMP * 1000)
+        last = info["last"] or (updated or 0) / 1000 or None
         idle = now - last if last else None
         ttl = info["ttl"] or "5m"
-        expired = d.get("status") != "busy" and (idle is None or idle > LIFETIME[ttl])
+        expired = status != "busy" and (idle is None or idle > LIFETIME[ttl])
         cost = None
         if expired and info["context"]:
             r = pricing.rates(prices, info["model"], info["speed"])
             cost = info["context"] * r[f"cache_write_{ttl}"] if r else None
         sessions.append({
-            "pid": pid, "id": sid, "cwd": d.get("cwd"), "status": d.get("status") or "?",
-            "where": where, "title": info["title"] or d.get("name"), "last_message": last,
+            "pid": pid, "id": sid, "cwd": transcript.text(d, "cwd"), "status": status or "?",
+            "where": where, "title": info["title"] or transcript.text(d, "name"),
+            "last_message": last,
             "idle_seconds": idle, "context": info["context"], "model": info["model"],
             "cache": "expired" if expired else "warm", "cache_lifetime": ttl,
             "resume_cost": cost, "this_session": pid in mine, "has_transcript": t is not None,
-            "job_id": d.get("jobId"), "parked_job_id": d.get("parkedJobId"),
+            "job_id": transcript.text(d, "jobId"),
+            "parked_job_id": transcript.text(d, "parkedJobId"),
         })
     sessions.sort(key=lambda s: -(s["last_message"] or 0))
     for n, s in enumerate(sessions, 1):

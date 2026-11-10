@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+from . import transcript
+
 # Price fields and the pricing page column each one is read from, in page order.
 _PAGE_COLUMNS = (
     ("Base input tokens", "input"),
@@ -17,6 +19,9 @@ _PAGE_COLUMNS = (
 )
 FIELDS = tuple(field for _, field in _PAGE_COLUMNS)
 _DATE_SUFFIX = re.compile(r"-\d{8}$")
+MAX_PRICE = 1_000_000  # USD per million tokens
+MAX_MULTIPLIER = 1_000
+_LIMITS = {**dict.fromkeys(FIELDS, MAX_PRICE), "fast_multiplier": MAX_MULTIPLIER}
 
 
 def load_bundled():
@@ -26,11 +31,34 @@ def load_bundled():
 
 
 def load(overrides=None):
-    """Bundled prices with per-model overrides from the user config merged on top."""
+    """Bundled prices with per-model overrides from the user config merged on top.
+
+    A model whose override isn't an object of valid prices has no price at all, so its cost
+    shows as unknown instead of silently falling back to the bundled price.
+    """
     prices = load_bundled()
-    for model, fields in (overrides or {}).items():
-        prices[model] = {**prices.get(model, {}), **fields}
+    if not isinstance(overrides, dict):
+        return prices
+    for model, fields in overrides.items():
+        checked = _checked(fields)
+        if checked is None:
+            prices.pop(model, None)
+        else:
+            prices[model] = {**prices.get(model, {}), **checked}
     return prices
+
+
+def _checked(fields):
+    """The known fields of one price override, or None if any of them is invalid."""
+    if not isinstance(fields, dict):
+        return None
+    checked = {}
+    for name, upper in _LIMITS.items():
+        if name in fields:
+            checked[name] = transcript.number(fields[name], upper)
+            if checked[name] is None:
+                return None
+    return checked
 
 
 def normalize_model(model):
