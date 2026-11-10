@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from conftest import usage_line
+from conftest import BAD_VALUES, usage_line
 
 from tallyline import cli, paths, sessions
 
@@ -152,3 +152,32 @@ def test_sort_by_resume_cost(home):
 def test_cli_with_no_sessions(home, capsys):
     cli.main(["sessions"])
     assert "No open Claude Code sessions." in capsys.readouterr().out
+
+
+def test_a_wrong_value_in_any_session_field_is_treated_as_missing(home):
+    transcript("s1", "Fix login", [(NOW - 7200, 1_000, 0, 1_000)])
+    good = {"pid": ME, "sessionId": "s1", "cwd": "/p", "status": "idle", "tmux": "main:0.1",
+            "kind": "interactive", "name": "n", "updatedAt": NOW * 1000, "jobId": "j",
+            "parkedJobId": "k"}
+    def no_constants(name):
+        raise AssertionError(f"{name} in the JSON output")
+    for key in good:
+        for bad in BAD_VALUES:
+            path = paths.claude_dir() / "sessions" / f"{ME}.json"
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(json.dumps({**good, key: bad}))
+            for as_json in (False, True):
+                out = sessions.run(as_json=as_json, prices=PRICES, now=NOW, table={}, panes={})
+                if as_json:
+                    json.loads(out, parse_constant=no_constants)
+            for s in collect():
+                # only the session's own transcript, matched exactly
+                assert s["has_transcript"] == (s["id"] == "s1"), (key, bad)
+
+
+@pytest.mark.parametrize("content", [b"[" * 10 ** 6, b"\xff\xfe", b"[]", b"null"],
+                         ids=["deeply-nested", "not-utf-8", "list", "null"])
+def test_session_files_that_are_not_an_object_are_skipped(home, content):
+    session_file(ME, "a1")
+    (paths.claude_dir() / "sessions" / "123.json").write_bytes(content)
+    assert [s["id"] for s in collect()] == ["a1"]

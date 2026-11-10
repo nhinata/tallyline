@@ -25,14 +25,17 @@ def status_command():
 
 
 def is_ours(command):
+    import re
     import shlex
 
     try:
         words = shlex.split(command or "")
     except ValueError:
         return False
-    return bool(words) and (words[0].rsplit("/", 1)[-1] == "tallyline"
-                            or words[-2:] == ["-m", "tallyline"])
+    if not words:
+        return False
+    name = re.split(r"[\\/]", words[0])[-1].lower()  # Windows paths use backslashes
+    return name in ("tallyline", "tallyline.exe") or words[-2:] == ["-m", "tallyline"]
 
 
 def cmd_render(_args):

@@ -166,7 +166,7 @@ If a model is missing from the table, its cost shows as `+?`. To fill in a price
 }
 ```
 
-Fast mode requests are multiplied by each model's `fast_multiplier`.
+Fast mode requests are multiplied by each model's `fast_multiplier`. If a price in `config.json` is invalid, that model's cost shows as `+?`.
 
 ## Caveats
 

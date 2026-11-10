@@ -1,4 +1,5 @@
 import pytest
+from conftest import BAD_VALUES
 
 from tallyline import pricing
 
@@ -123,3 +124,34 @@ def test_overrides_merge_onto_bundled():
     assert prices["claude-sonnet-5"]["output"] == 99
     assert prices["claude-sonnet-5"]["input"] == 2.0
     assert prices["claude-new"] == {"input": 1}
+
+
+OVERRIDE = {"input": 3, "cache_write_5m": 3.75, "cache_write_1h": 6, "cache_read": 0.3,
+            "output": 15, "fast_multiplier": 2}
+WRONG_PRICES = [v for v in BAD_VALUES if not (type(v) in (int, float) and v in (1, 1.5))]
+
+
+def test_valid_overrides_replace_or_add_prices():
+    prices = pricing.load({"claude-new": OVERRIDE, "claude-sonnet-5": {"output": 20},
+                           "claude-free": {**OVERRIDE, "input": -0.0}})
+    assert pricing.rates(prices, "claude-new", "fast")["input"] == 6 / 1e6
+    assert pricing.rates(prices, "claude-sonnet-5", "standard")["output"] == 20 / 1e6
+    assert str(prices["claude-free"]["input"]) == "0.0"
+
+
+def test_a_wrong_price_makes_that_model_unknown_instead_of_failing():
+    for field in OVERRIDE:
+        for bad in WRONG_PRICES:
+            for model in ("claude-new", "claude-sonnet-5"):
+                prices = pricing.load({model: {**OVERRIDE, field: bad}, "claude-new-2": OVERRIDE})
+                assert pricing.cost(prices, model, "standard", {"input": 1}) is None
+                assert pricing.rates(prices, "claude-new-2", "standard") is not None
+    for bad in BAD_VALUES:
+        if not isinstance(bad, dict):
+            assert pricing.rates(pricing.load({"claude-sonnet-5": bad}), "claude-sonnet-5",
+                                 "standard") is None
+
+
+def test_overrides_that_are_not_an_object_are_ignored():
+    for bad in BAD_VALUES:
+        assert pricing.load(bad if bad != {"a": 1} else {}) == pricing.load_bundled()
