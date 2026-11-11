@@ -1,5 +1,9 @@
 # tallyline
 
+[![PyPI](https://img.shields.io/pypi/v/tallyline)](https://pypi.org/project/tallyline/)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fnhinata%2Ftallyline%2Fmain%2Fpyproject.toml)](https://github.com/nhinata/tallyline/blob/main/pyproject.toml)
+[![Test](https://github.com/nhinata/tallyline/actions/workflows/test.yml/badge.svg)](https://github.com/nhinata/tallyline/actions/workflows/test.yml)
+
 A fast Claude Code status line that **tallies your token usage and API-equivalent cost by day, month and year** across every session, and tells you **why your usage is high**.
 
 ![tallyline status line on a Pro plan](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
