@@ -1,5 +1,9 @@
 # tallyline
 
+[![PyPI](https://img.shields.io/pypi/v/tallyline)](https://pypi.org/project/tallyline/)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fnhinata%2Ftallyline%2Fmain%2Fpyproject.toml)](https://github.com/nhinata/tallyline/blob/main/pyproject.toml)
+[![Test](https://github.com/nhinata/tallyline/actions/workflows/test.yml/badge.svg)](https://github.com/nhinata/tallyline/actions/workflows/test.yml)
+
 Claude Code の**全セッションのトークン使用量と API 換算の金額を、日・月・年ごとに集計して表示する**、高速なステータスラインです。**使用量が多い理由**も調べられます。
 
 ![Pro プランでの tallyline の表示](https://raw.githubusercontent.com/nhinata/tallyline/main/assets/screenshot.png)
