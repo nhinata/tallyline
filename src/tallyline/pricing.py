@@ -9,7 +9,15 @@ from pathlib import Path
 
 from . import transcript
 
-FIELDS = ("input", "cache_write_5m", "cache_write_1h", "cache_read", "output")
+# Price fields and the pricing page column each one is read from, in page order.
+_PAGE_COLUMNS = (
+    ("Base input tokens", "input"),
+    ("5m cache writes", "cache_write_5m"),
+    ("1h cache writes", "cache_write_1h"),
+    ("Cache hits and refreshes", "cache_read"),
+    ("Output tokens", "output"),
+)
+FIELDS = tuple(field for _, field in _PAGE_COLUMNS)
 _DATE_SUFFIX = re.compile(r"-\d{8}$")
 MAX_PRICE = 1_000_000  # USD per million tokens
 MAX_MULTIPLIER = 1_000
@@ -80,7 +88,12 @@ def cost(prices, model, speed, tokens):
 
 # --- parsing the official pricing page (used by scripts/update_prices.py and tests) ---
 
-_PRICE = re.compile(r"\$([\d.]+)\s*/\s*MTok")
+_PRICE = re.compile(r"\$(\d+(?:\.\d+)?)(?: USD)? / MTok(?:<sup>\d+</sup>)?")
+_SEPARATOR = re.compile(r":?-+:?")
+_FENCE = re.compile(r"```|~~~")
+_HEADING = re.compile(r" {0,3}(#+) ")
+_MODEL_TABLE = ("Model",) + tuple(column for column, _ in _PAGE_COLUMNS)
+_FAST_TABLE = ("Model", "Input", "Output")
 
 
 _MODEL_ID = re.compile(r"^claude-[a-z]+(-\d+)+$")
@@ -98,54 +111,104 @@ def _cells(line):
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
-def _table_after(lines, heading):
-    """Rows (as cell lists) of the first markdown table after a heading line."""
-    try:
-        start = next(i for i, l in enumerate(lines) if l.strip().lower() == heading.lower())
-    except StopIteration:
-        raise ValueError(f"heading not found: {heading}")
-    rows = []
-    for line in lines[start + 1:]:
+def _price(cell, row):
+    m = _PRICE.fullmatch(cell)
+    if not m:
+        raise ValueError(f"unreadable price for {row}: {cell!r}")
+    return float(m.group(1))
+
+
+def _table_rows(table, columns, heading):
+    """The data rows of one markdown table, after checking it against the expected columns."""
+    if tuple(table[0]) != columns:
+        raise ValueError(f"unexpected table header under {heading}: {table[0]}")
+    if len(table) < 2 or len(table[1]) != len(columns) or not all(
+        _SEPARATOR.fullmatch(c) for c in table[1]
+    ):
+        raise ValueError(f"unexpected table separator under: {heading}")
+    if len(table) < 3:
+        raise ValueError(f"table without rows under: {heading}")
+    for row in table[2:]:
+        if len(row) != len(columns):
+            raise ValueError(f"unexpected number of cells under {heading}: {row[0]}")
+    return table[2:]
+
+
+def _section_rows(lines, heading, columns):
+    """Rows (as cell lists) of every table in a section, each checked against columns.
+
+    The section runs from its heading to the next heading of the same or a higher level.
+    Sections and tables are found by the first characters of a line only; as in markdown, a
+    heading may be indented by up to three spaces. A sub-heading or a code block inside the
+    section raises, and so does a line that contains "|" but does not start with it (a table
+    row missing its leading pipe). Other lines between tables are ignored.
+    """
+    starts = [i for i, text in enumerate(lines) if text.strip().lower() == heading.lower()]
+    if len(starts) != 1:
+        raise ValueError(f"expected one heading, found {len(starts)}: {heading}")
+    level = len(heading) - len(heading.lstrip("#"))
+    tables, in_table = [], False
+    for line in lines[starts[0] + 1:]:
+        if _FENCE.match(line.lstrip()):
+            raise ValueError(f"code block under: {heading}")
         if line.lstrip().startswith("|"):
-            rows.append(_cells(line))
-        elif rows:
-            break
-        elif line.startswith("#"):
-            break
-    if len(rows) < 3:
+            if not in_table:
+                tables.append([])
+            tables[-1].append(_cells(line))
+            in_table = True
+            continue
+        in_table = False
+        m = _HEADING.match(line)
+        if m:
+            if len(m.group(1)) <= level:
+                break
+            raise ValueError(f"sub-heading under {heading}: {line}")
+        if "|" in line:
+            raise ValueError(f"table row without a leading pipe under {heading}: {line}")
+    if not tables:
         raise ValueError(f"no table under: {heading}")
-    return rows[2:]  # skip header and separator
+    return [row for table in tables for row in _table_rows(table, columns, heading)]
 
 
 def parse_pricing_page(markdown):
-    """Build the models price table from the pricing page markdown."""
-    lines = markdown.splitlines()
-    models = {}
-    for row in _table_after(lines, "## Model pricing"):
-        if len(row) < 6:
-            continue
-        # Some models are priced by prompt length ("for prompts over 100,000 tokens");
-        # the table holds one price per model, so keep the standard tier.
-        if re.search(r"for prompts over", row[0], re.IGNORECASE):
-            continue
-        values = [_PRICE.search(c) for c in row[1:6]]
-        if not all(values):
-            continue
-        # column order on the page matches FIELDS: input, 5m write, 1h write, cache hit, output
-        models[_model_id(row[0])] = dict(zip(FIELDS, (float(v.group(1)) for v in values)))
+    """Build the models price table from the pricing page markdown.
 
-    try:
-        fast_rows = _table_after(lines, "### Fast mode pricing")
-    except ValueError:
-        fast_rows = []
-    for row in fast_rows:
-        m = _PRICE.search(row[1]) if len(row) > 1 else None
-        if not m:
+    Every row of the model and fast mode tables is read (except the long-prompt tier), and a
+    table or row that does not fit the expected layout raises ValueError.
+    """
+    lines = markdown.splitlines()
+    models, long_prompt = {}, set()
+    for row in _section_rows(lines, "## Model pricing", _MODEL_TABLE):
+        # Some models are priced by prompt length ("for prompts over 100,000 tokens");
+        # the table holds one price per model, so keep the standard tier. If the wording
+        # changes, the other tier fails below as a second row for the same model.
+        if re.search(r"for prompts over", row[0], re.IGNORECASE):
+            long_prompt.add(_model_id(row[0]))
             continue
+        model = _model_id(row[0])
+        if model in models:
+            raise ValueError(f"more than one row for: {model}")
+        models[model] = {field: _price(c, row[0]) for (_, field), c in zip(_PAGE_COLUMNS, row[1:])}
+    missing = sorted(long_prompt - models.keys())
+    if missing:
+        raise ValueError(f"only a long-prompt tier for: {', '.join(missing)}")
+
+    # fast_multiplier applies to every field, so fast mode must scale input and output alike
+    for row in _section_rows(lines, "### Fast mode pricing", _FAST_TABLE):
+        fast_input, fast_output = _price(row[1], row[0]), _price(row[2], row[0])
         for name in row[0].split(" / "):
-            mid = _model_id(name)
-            if mid in models and models[mid]["input"]:
-                models[mid]["fast_multiplier"] = round(float(m.group(1)) / models[mid]["input"], 4)
+            model = _model_id(name)
+            p = models.get(model)
+            if p is None:
+                raise ValueError(f"unknown fast mode model: {model}")
+            if not p["input"] or not p["output"]:
+                raise ValueError(f"no standard price for fast mode model: {model}")
+            if "fast_multiplier" in p:
+                raise ValueError(f"more than one fast mode row for: {model}")
+            multiplier = round(fast_input / p["input"], 4)
+            if multiplier != round(fast_output / p["output"], 4):
+                raise ValueError(f"fast mode input and output multipliers differ for: {model}")
+            p["fast_multiplier"] = multiplier
 
     if not models:
         raise ValueError("no model prices parsed")
