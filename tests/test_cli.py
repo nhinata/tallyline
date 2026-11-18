@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from conftest import BAD_VALUES, fail_open, usage_line
+from conftest import BAD_VALUES, DEEP, fail_open, usage_line
 
 from tallyline import cli, config, paths, store
 
@@ -214,9 +214,8 @@ def status_line(monkeypatch, capsys):
 
 def test_deeply_nested_config_counts_as_empty_except_for_the_config_command(
         home, monkeypatch, capsys):
-    # deep enough that json can't read it on any Python version
     paths.config_path().parent.mkdir(parents=True)
-    paths.config_path().write_text('{"prices": ' + "[" * 10 ** 6)
+    paths.config_path().write_text('{"prices": ' + DEEP)
     assert config.load() == config.DEFAULTS
     assert "tallyline: error" not in status_line(monkeypatch, capsys)
     cli.main(["sessions"])
@@ -237,3 +236,62 @@ def test_wrong_prices_in_config_never_break_the_commands(home, monkeypatch, caps
                 cli.main(argv)
                 out = capsys.readouterr().out
                 assert "NaN" not in out and "Infinity" not in out, (prices, argv)
+
+
+
+@pytest.mark.parametrize("stdin", [DEEP, "[]", "1"])
+def test_status_line_reads_anything_but_an_object_on_stdin_as_empty(
+        home, monkeypatch, capsys, stdin):
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO(stdin))
+    cli.main([])
+    out = capsys.readouterr().out
+    assert out.strip() and "tallyline: error" not in out
+
+
+@pytest.mark.parametrize("content", [DEEP, "[]", '"x"'])
+@pytest.mark.parametrize("command", ["init", "uninstall"])
+def test_settings_that_are_not_a_json_object_are_left_untouched(home, content, command):
+    paths.settings_path().write_text(content)
+    with pytest.raises(SystemExit) as e:
+        cli.main([command])
+    assert "add this manually" in str(e.value)
+    assert paths.settings_path().read_text() == content
+
+
+@pytest.mark.parametrize("command", ["init", "uninstall"])
+def test_unreadable_settings_stop_with_the_manual_entry(home, command):
+    paths.settings_path().mkdir()  # reading fails on every platform
+    with pytest.raises(SystemExit) as e:
+        cli.main([command])
+    assert "add this manually" in str(e.value)
+    paths.settings_path().rmdir()
+    paths.settings_path().write_bytes(b'{"theme": "\xff"}')
+    with pytest.raises(SystemExit) as e:
+        cli.main([command])
+    assert "add this manually" in str(e.value)
+
+
+@pytest.mark.parametrize("value", BAD_VALUES)
+def test_any_status_line_value_is_not_taken_for_ours(home, value):
+    original = json.dumps({"statusLine": value}, allow_nan=True)
+    paths.settings_path().write_text(original)
+    cli.main(["uninstall"])
+    assert paths.settings_path().read_text() == original
+    paths.settings_path().write_text(json.dumps({"statusLine": {"command": value}}))
+    cli.main(["uninstall"])
+    cli.main(["init", "--force"])
+    assert settings()["statusLine"]["command"] == "/home/u/.local/bin/tallyline"
+
+
+@pytest.mark.parametrize("command", ["init", "uninstall"])
+def test_settings_that_cannot_be_written_as_utf8_are_left_untouched(home, command):
+    original = '{"theme": "\\ud800", "statusLine": {"command": "tallyline"}}'
+    paths.settings_path().write_text(original)
+    backup = paths.settings_path().with_name("settings.json.bak")
+    backup.write_text("{}")
+    with pytest.raises(SystemExit) as e:
+        cli.main([command, "--force"] if command == "init" else [command])
+    assert "add this manually" in str(e.value)
+    assert paths.settings_path().read_text() == original
+    assert backup.read_text() == "{}"

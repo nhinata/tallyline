@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 import pytest
-from conftest import BAD_VALUES, usage_line
+from conftest import BAD_VALUES, DEEP, usage_line
 
 from tallyline import cli, paths, sessions
 
@@ -175,7 +175,7 @@ def test_a_wrong_value_in_any_session_field_is_treated_as_missing(home):
                 assert s["has_transcript"] == (s["id"] == "s1"), (key, bad)
 
 
-@pytest.mark.parametrize("content", [b"[" * 10 ** 6, b"\xff\xfe", b"[]", b"null"],
+@pytest.mark.parametrize("content", [DEEP.encode(), b"\xff\xfe", b"[]", b"null"],
                          ids=["deeply-nested", "not-utf-8", "list", "null"])
 def test_session_files_that_are_not_an_object_are_skipped(home, content):
     session_file(ME, "a1")

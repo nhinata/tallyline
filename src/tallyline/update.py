@@ -10,7 +10,7 @@ import re
 import sys
 import time
 
-from . import __version__, paths
+from . import __version__, paths, transcript
 
 URL = "https://pypi.org/pypi/tallyline/json"
 INTERVAL = 86400
@@ -22,10 +22,14 @@ def state_path():
 
 
 def _read_state():
+    """The saved state, keeping only valid values: checked_at and latest may be missing."""
     try:
-        return json.loads(state_path().read_text(encoding="utf-8"))
+        state = transcript.load_line(state_path().read_text(encoding="utf-8")) or {}
     except (OSError, ValueError):
-        return {}
+        state = {}
+    valid = {"checked_at": transcript.number(state.get("checked_at"), transcript.MAX_TIMESTAMP),
+             "latest": transcript.text(state, "latest")}
+    return {key: value for key, value in valid.items() if value is not None}
 
 
 def _write_state(state):

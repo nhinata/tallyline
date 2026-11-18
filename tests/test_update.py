@@ -1,6 +1,9 @@
 import io
 import json
 
+import pytest
+from conftest import BAD_VALUES, DEEP
+
 from tallyline import cli, config, update
 
 
@@ -58,3 +61,20 @@ def test_run_check_survives_network_failure(home, monkeypatch):
 def test_config_update_check_toggle(home):
     cli.main(["config", "update-check", "off"])
     assert config.load()["update_check"] is False
+
+
+@pytest.mark.parametrize("content", [DEEP, "[]", "1"])
+def test_state_that_is_not_a_json_object_counts_as_empty(home, content):
+    update.state_path().parent.mkdir(parents=True, exist_ok=True)
+    update.state_path().write_text(content)
+    assert update._read_state() == {}
+    assert update.notice(cfg(), now=1e9, current="0.1.0") is None
+
+
+@pytest.mark.parametrize("value", BAD_VALUES)
+def test_wrong_values_in_the_state_are_ignored(home, monkeypatch, value):
+    spawned = []
+    monkeypatch.setattr(update, "_spawn_check", lambda: spawned.append(1))
+    update._write_state({"checked_at": value, "latest": value})
+    assert update.notice(cfg(), now=1e9, current="0.1.0") is None
+    assert spawned == [1]
