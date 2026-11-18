@@ -63,7 +63,7 @@ def test_config_update_check_toggle(home):
     assert config.load()["update_check"] is False
 
 
-@pytest.mark.parametrize("content", [DEEP, "[]", "1"])
+@pytest.mark.parametrize("content", [DEEP, "[]", "1"], ids=["deeply-nested", "list", "number"])
 def test_state_that_is_not_a_json_object_counts_as_empty(home, content):
     update.state_path().parent.mkdir(parents=True, exist_ok=True)
     update.state_path().write_text(content)

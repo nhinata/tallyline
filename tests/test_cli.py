@@ -239,7 +239,7 @@ def test_wrong_prices_in_config_never_break_the_commands(home, monkeypatch, caps
 
 
 
-@pytest.mark.parametrize("stdin", [DEEP, "[]", "1"])
+@pytest.mark.parametrize("stdin", [DEEP, "[]", "1"], ids=["deeply-nested", "list", "number"])
 def test_status_line_reads_anything_but_an_object_on_stdin_as_empty(
         home, monkeypatch, capsys, stdin):
     import io
@@ -249,7 +249,8 @@ def test_status_line_reads_anything_but_an_object_on_stdin_as_empty(
     assert out.strip() and "tallyline: error" not in out
 
 
-@pytest.mark.parametrize("content", [DEEP, "[]", '"x"'])
+@pytest.mark.parametrize("content", [DEEP, "[]", '"x"'],
+                         ids=["deeply-nested", "list", "string"])
 @pytest.mark.parametrize("command", ["init", "uninstall"])
 def test_settings_that_are_not_a_json_object_are_left_untouched(home, content, command):
     paths.settings_path().write_text(content)
