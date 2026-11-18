@@ -1,6 +1,6 @@
 import json
 
-from . import paths
+from . import paths, transcript
 
 RANGES = ("today", "month", "year", "all")
 DEFAULTS = {
@@ -19,15 +19,10 @@ def load(strict=False):
     ValueError when strict, since saving after a lenient load would overwrite that file.
     """
     try:
-        with open(paths.config_path(), encoding="utf-8") as f:
-            user = json.load(f)
-        if not isinstance(user, dict):
+        user = transcript.load_line(paths.config_path().read_text(encoding="utf-8"))
+        if user is None:
             raise ValueError("not a JSON object")
     except FileNotFoundError:
-        user = {}
-    except RecursionError:
-        if strict:
-            raise ValueError("nested too deeply") from None
         user = {}
     except (OSError, ValueError):
         if strict:

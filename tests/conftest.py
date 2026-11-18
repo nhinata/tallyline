@@ -5,7 +5,8 @@ import pytest
 NESTED = []
 for _ in range(500):  # deep, but readable by json on every Python version
     NESTED = [NESTED]
-# Wrong values for any field of JSON that tallyline reads but doesn't write. Session-id-like
+DEEP = "[" * 10 ** 6  # deep enough that json can't read it on any Python version
+# Wrong values for any field of JSON that tallyline reads. Session-id-like
 # strings are relative to the id "s1": patterns and a different case that match its file.
 BAD_VALUES = (None, True, 1, -1, 1.5, "", "x", [], {"a": 1}, NESTED, 10 ** 30, 10 ** 400,
               float("nan"), float("inf"), "9999-12-31T23:59:59Z", "a\ud83d", "a\x00b",

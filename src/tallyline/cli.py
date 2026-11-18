@@ -3,7 +3,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, config, paths, render, store
+from . import __version__, config, paths, render, store, transcript
 
 ON_WORDS = ("1", "true", "on", "yes")
 OFF_WORDS = ("0", "false", "off", "no")
@@ -28,8 +28,10 @@ def is_ours(command):
     import re
     import shlex
 
+    if not isinstance(command, str):
+        return False
     try:
-        words = shlex.split(command or "")
+        words = shlex.split(command)
     except ValueError:
         return False
     if not words:
@@ -40,8 +42,8 @@ def is_ours(command):
 
 def cmd_render(_args):
     try:
-        info = json.load(sys.stdin)
-    except ValueError:
+        info = transcript.load_line(sys.stdin.read()) or {}
+    except (OSError, ValueError):  # including undecodable bytes
         info = {}
     try:
         cfg = config.load()
@@ -77,44 +79,64 @@ def _display_path(path):
         return str(path)
 
 
+def _manual_entry(path, problem):
+    sys.exit(f"{path} {problem}; add this manually:\n"
+             + json.dumps({"statusLine": {"type": "command", "command": status_command()}}))
+
+
 def _read_settings(path):
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except ValueError:
-        sys.exit(f"{path} is not valid JSON; add this manually:\n"
-                 + json.dumps({"statusLine": {"type": "command", "command": status_command()}}))
+        settings = transcript.load_line(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):  # including undecodable bytes
+        settings = None
+    if settings is None:
+        _manual_entry(path, "can't be read as a JSON object")
+    return settings
+
+
+def _write_settings(path, settings):
+    """Back up and write settings, or stop before touching either file if they can't be
+    written as UTF-8."""
+    import shutil
+
+    try:
+        data = (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    except UnicodeEncodeError:  # a lone surrogate, which JSON can carry but UTF-8 can't
+        _manual_entry(path, "can't be rewritten as UTF-8")
+    if path.exists():
+        shutil.copy2(path, path.with_name(path.name + ".bak"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def _current_command(settings):
+    current = settings.get("statusLine")
+    return current.get("command") if isinstance(current, dict) else None
 
 
 def cmd_init(args):
     path = paths.settings_path()
     settings = _read_settings(path)
     current = settings.get("statusLine")
-    if current and not is_ours(current.get("command")) and not args.force:
-        sys.exit(f"statusLine is already set to {current.get('command')!r} in {path}.\n"
+    command = _current_command(settings)
+    if current and not is_ours(command) and not args.force:
+        sys.exit(f"statusLine is already set to {command!r} in {path}.\n"
                  "Re-run with --force to replace it.")
-    if path.exists():
-        import shutil
-
-        shutil.copy2(path, path.with_name(path.name + ".bak"))
     settings["statusLine"] = {"type": "command", "command": status_command()}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_settings(path, settings)
     print(f"Added tallyline to {path}. Claude Code picks it up without a restart.")
 
 
 def cmd_uninstall(_args):
     path = paths.settings_path()
     settings = _read_settings(path)
-    if not is_ours((settings.get("statusLine") or {}).get("command")):
+    if not is_ours(_current_command(settings)):
         print("tallyline is not configured as the status line; nothing to do.")
         return
-    import shutil
-
-    shutil.copy2(path, path.with_name(path.name + ".bak"))
     del settings["statusLine"]
-    path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_settings(path, settings)
     print(f"Removed tallyline from {path}. Cache remains at {paths.db_path()}.")
 
 

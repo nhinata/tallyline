@@ -2,8 +2,9 @@
 
 The transcript format is undocumented and a line can hold anything, so values are checked
 here before they are used. A request that fails the checks is left out by all of them.
-The same checks apply to other JSON that tallyline reads but doesn't write: Claude Code's
-session files and the price overrides in config.json.
+The same checks apply to all other JSON that tallyline reads, since any of it can be
+edited or written by something else: the status line input, settings.json, Claude Code's
+session files, config.json and update.json.
 """
 import json
 from collections import namedtuple
@@ -18,7 +19,7 @@ Usage = namedtuple("Usage", "key ts session model speed tokens context")
 
 
 def load_line(line):
-    """The JSON object on one transcript line, or None if the line doesn't hold one."""
+    """The JSON object in line (one transcript line or a whole file), or None if it isn't one."""
     try:
         d = json.loads(line)
     except (ValueError, RecursionError):
